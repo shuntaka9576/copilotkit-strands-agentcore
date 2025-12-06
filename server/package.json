@@ -6,9 +6,11 @@
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/aws-lambda": "8.10.159"
+    "@types/aws-lambda": "8.10.159",
+    "@types/node": "^22.0.0"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "3.946.0",
     "hono": "4.10.7"
   }
 }

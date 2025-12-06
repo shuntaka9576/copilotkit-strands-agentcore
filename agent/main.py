@@ -8,7 +8,6 @@ This example demonstrates a Strands agent integrated with AG-UI, featuring:
 """
 
 import json
-import os
 from typing import List
 
 from ag_ui_strands import (
@@ -17,12 +16,9 @@ from ag_ui_strands import (
     ToolBehavior,
     create_strands_app,
 )
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from strands import Agent, tool
-from strands.models.openai import OpenAIModel
-
-load_dotenv()
+from strands.models import BedrockModel
 
 
 class ProverbsList(BaseModel):
@@ -124,11 +120,9 @@ shared_state_config = StrandsAgentConfig(
     },
 )
 
-# Initialize OpenAI model
-api_key = os.getenv("OPENAI_API_KEY", "")
-model = OpenAIModel(
-    client_args={"api_key": api_key},
-    model_id="gpt-4o",
+model = BedrockModel(
+    model_id="jp.anthropic.claude-haiku-4-5-20251001-v1:0",
+    region_name="ap-northeast-1",
 )
 
 system_prompt = (
@@ -152,9 +146,16 @@ agui_agent = StrandsAgent(
 )
 
 # Create the FastAPI app
-app = create_strands_app(agui_agent, "/")
+app = create_strands_app(agui_agent, "/invocations")
+
+
+@app.get("/ping")
+async def ping():
+    """Health check endpoint for AWS Bedrock AgentCore."""
+    return {"status": "healthy"}
+
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
