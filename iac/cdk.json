@@ -1,0 +1,6 @@
+{
+  "app": "pnpm tsx bin/cdk.ts",
+  "context": {
+    "@aws-cdk/customresources:installLatestAwsSdkDefault": false
+  }
+}

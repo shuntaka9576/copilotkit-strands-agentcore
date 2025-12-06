@@ -57,3 +57,5 @@ __pycache__/
 
 # drawio
 .$architecture.drawio.png.bkp
+
+cdk.out

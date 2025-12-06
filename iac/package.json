@@ -1,0 +1,21 @@
+{
+  "name": "iac",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "deploy": "cdk deploy"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "aws-cdk": "2.1033.0",
+    "esbuild": "0.27.1",
+    "source-map-support": "0.5.21"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-bedrock-agentcore-alpha": "2.232.1-alpha.0",
+    "aws-cdk-lib": "2.232.0",
+    "change-case": "5.4.4",
+    "constructs": "10.4.3"
+  }
+}

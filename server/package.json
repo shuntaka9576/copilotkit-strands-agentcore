@@ -1,0 +1,14 @@
+{
+  "name": "server",
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.159"
+  },
+  "dependencies": {
+    "hono": "4.10.7"
+  }
+}

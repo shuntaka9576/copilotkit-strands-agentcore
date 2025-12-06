@@ -1,3 +1,5 @@
 packages:
   - "web"
   - "agent"
+  - "iac"
+  - "server"
