@@ -219,55 +219,9 @@ const InterruptHumanInTheLoop: React.FC<{
   );
 };
 
-const Chat = () => {
-  useLangGraphInterrupt({
-    render: ({ event, resolve }) => <InterruptHumanInTheLoop event={event} resolve={resolve} />,
-  });
-  useHumanInTheLoop({
-    name: "extract_video_frames",
-    description: "動画からフレームを抽出し、ユーザーに選択させます",
-    parameters: [
-      {
-        name: "frames",
-        type: "object[]",
-        attributes: [
-          { name: "description", type: "string" },
-          { name: "status", type: "string", enum: ["enabled", "disabled", "executing"] },
-          { name: "timestamp", type: "string" },
-          { name: "image_url", type: "string" },
-        ],
-      },
-    ],
-    available: "enabled",
-    render: ({ args, respond, status }) => {
-      return <FramesFeedback args={args} respond={respond} status={status} />;
-    },
-  });
-
-  return (
-    <div className="flex justify-center items-center h-full w-full">
-      <div className="h-full w-full md:w-8/10 md:h-8/10 rounded-lg">
-        <CopilotChat
-          suggestions={[
-            { title: "製造ライン点検", message: "製造ラインの点検動画を解析して、チェックポイントを6フレーム抽出してください" },
-            { title: "組立工程", message: "組立工程の動画を解析して、重要な作業手順を9フレーム抽出してください" },
-          ]}
-          className="h-full rounded-2xl max-w-6xl mx-auto"
-          labels={{
-            initial:
-              "こんにちは！動画解析アシスタントです。動画の重要なフレームを抽出し、分析するお手伝いをします。",
-          }}
-        />
-      </div>
-    </div>
-  );
-};
-
 const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; status: any }) => {
   const { theme } = useTheme();
   const [localFrames, setLocalFrames] = useState<Frame[]>([]);
-  const [step, setStep] = useState<"frames" | "tags" | "done">("frames");
-  const [localTags, setLocalTags] = useState<Tag[]>([]);
   const [accepted, setAccepted] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -296,130 +250,21 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
   const handleReject = () => {
     if (respond) {
       setAccepted(false);
-      setStep("done");
       respond({ accepted: false });
     }
   };
 
-  // フレーム選択完了 → APIからタグ候補を取得 → タグ選択へ
-  const handleFrameConfirm = async () => {
+  // フレーム選択完了 → エージェントにrespond
+  const handleFrameConfirm = () => {
     const selectedFrames = localFrames.filter((frame) => frame.status === "enabled");
-
-    // サーバーにログを送信
-    try {
-      await fetch("http://localhost:8080/log_selected_frames", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ frames: selectedFrames }),
-      });
-    } catch (error) {
-      console.error("ログ送信エラー:", error);
-    }
-
-    // APIからタグ候補を取得
-    try {
-      const response = await fetch("http://localhost:8080/suggest_tags", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ frames: selectedFrames }),
-      });
-      const data = await response.json();
-      setLocalTags(data.tags);
-      setStep("tags");
-    } catch (error) {
-      console.error("タグ取得エラー:", error);
-      // エラー時はフレーム選択結果のみで完了
-      if (respond) {
-        setAccepted(true);
-        setStep("done");
-        respond({ accepted: true, frames: selectedFrames });
-      }
-    }
-  };
-
-  const handleTagToggle = (index: number) => {
-    setLocalTags((prevTags) =>
-      prevTags.map((tag, i) =>
-        i === index ? { ...tag, selected: !tag.selected } : tag
-      )
-    );
-  };
-
-  // タグ選択完了 → respond
-  const handleTagConfirm = () => {
     if (respond) {
-      const selectedFrames = localFrames.filter((frame) => frame.status === "enabled");
-      const selectedTags = localTags.filter((tag) => tag.selected);
       setAccepted(true);
-      setStep("done");
-      respond({ accepted: true, frames: selectedFrames, tags: selectedTags });
+      respond({ accepted: true, frames: selectedFrames });
     }
   };
-
-  const selectedTagCount = localTags.filter((tag) => tag.selected).length;
-
-  // タグ選択UI
-  if (step === "tags") {
-    return (
-      <div data-testid="select-tags" className="flex">
-        <div
-          className={`rounded-lg w-[600px] p-5 ${
-            theme === "dark"
-              ? "bg-slate-800 text-white border border-slate-600"
-              : "bg-white text-gray-800 border border-gray-300"
-          }`}
-        >
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300 dark:border-slate-600">
-            <h2 className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-              タグを選択
-            </h2>
-            <div className={`text-sm font-medium ${theme === "dark" ? "text-slate-300" : "text-gray-600"}`}>
-              選択中: {selectedTagCount} / {localTags.length}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-6">
-            {localTags.map((tag, index) => (
-              <div
-                key={index}
-                onClick={() => handleTagToggle(index)}
-                className={`relative px-4 py-2 rounded-lg cursor-pointer transition-all border-2 ${
-                  tag.selected
-                    ? "bg-blue-600 text-white border-blue-500"
-                    : theme === "dark"
-                      ? "bg-slate-600 text-slate-300 border-slate-500 opacity-50"
-                      : "bg-gray-200 text-gray-500 border-gray-300 opacity-50"
-                }`}
-              >
-                <span className="text-sm font-medium">{tag.name}</span>
-                {!tag.selected && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-xs px-1 rounded ${
-                      theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-white text-gray-600"
-                    }`}>
-                      除外
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <ActionButton variant="secondary" theme={theme} onClick={handleReject}>
-              キャンセル
-            </ActionButton>
-            <ActionButton variant="primary" theme={theme} onClick={handleTagConfirm}>
-              タグを確定
-            </ActionButton>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // 完了UI
-  if (step === "done") {
+  if (accepted !== null) {
     return (
       <div className="flex">
         <div
@@ -433,7 +278,7 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
                 : "bg-gray-100 text-gray-600"
           }`}
         >
-          {accepted ? "タグを適用しました" : "キャンセルしました"}
+          {accepted ? "フレームを選択しました" : "キャンセルしました"}
         </div>
       </div>
     );
@@ -605,81 +450,6 @@ const mockVideos: Video[] = [
 ];
 
 // 動画一覧テーブル（左パネル）
-const VideoTable = () => {
-  const { theme } = useTheme();
-  const { selectedVideo, setSelectedVideo } = useSelectedVideo();
-
-  return (
-    <div className="h-full flex flex-col">
-      <h2 className={`text-lg font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-        動画一覧
-      </h2>
-      <div className="flex-1 overflow-auto">
-        <table className="w-full">
-          <thead>
-            <tr className={`text-left text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
-              <th className="pb-2 font-medium">サムネイル</th>
-              <th className="pb-2 font-medium">名前</th>
-              <th className="pb-2 font-medium">タグ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockVideos.map((video) => (
-              <tr
-                key={video.id}
-                onClick={() => setSelectedVideo(video)}
-                className={`cursor-pointer transition-colors ${
-                  selectedVideo?.id === video.id
-                    ? theme === "dark"
-                      ? "bg-blue-900/50"
-                      : "bg-blue-100"
-                    : theme === "dark"
-                      ? "hover:bg-slate-700"
-                      : "hover:bg-gray-100"
-                }`}
-              >
-                <td className="py-2 pr-3">
-                  <img
-                    src={video.thumbnail}
-                    alt={video.title}
-                    className="w-20 h-12 object-cover rounded"
-                  />
-                </td>
-                <td className={`py-2 pr-3 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-                  <div className="text-sm font-medium">{video.title}</div>
-                  <div className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
-                    {video.duration}
-                  </div>
-                </td>
-                <td className="py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {video.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className={`px-2 py-0.5 text-xs rounded ${
-                          theme === "dark"
-                            ? "bg-slate-600 text-slate-200"
-                            : "bg-gray-200 text-gray-700"
-                        }`}
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {selectedVideo && (
-        <div className={`mt-4 p-3 rounded text-sm ${theme === "dark" ? "bg-slate-700 text-slate-200" : "bg-blue-50 text-blue-800"}`}>
-          選択中: {selectedVideo.title}
-        </div>
-      )}
-    </div>
-  );
-};
 
 // ChatPanel - 右側チャット
 const ChatPanel = () => {
@@ -721,6 +491,26 @@ const ChatPanel = () => {
       return <FramesFeedback args={args} respond={respond} status={status} />;
     },
   });
+
+  // useHumanInTheLoop({
+  //   name: "select_tags",
+  //   description: "タグ候補を表示し、ユーザーに選択させます",
+  //   parameters: [
+  //     {
+  //       name: "tags",
+  //       type: "object[]",
+  //       attributes: [
+  //         { name: "name", type: "string" },
+  //         { name: "selected", type: "boolean" },
+  //       ],
+  //     },
+  //   ],
+  //   available: "enabled",
+  //   render: ({ args, respond, status }) => {
+  //     console.log("useHumanInTheLoop select_tags render called", { args, status });
+  //     return <TagsFeedback args={args} respond={respond} status={status} />;
+  //   },
+  // });
 
   const { appendMessage } = useCopilotChat();
   const [inputValue, setInputValue] = useState("");

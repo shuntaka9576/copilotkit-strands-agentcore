@@ -76,6 +76,30 @@ def extract_video_frames(
     return f"{len(frames)}個のフレームを抽出しました。ユーザーの選択をお待ちください。"
 
 
+@tool
+def select_tags(
+    tags: List[Tag],
+) -> str:
+    """タグ候補を表示し、ユーザーに選択させます。
+
+    このツールは、フレーム解析から推測したタグ候補のリストを表示し、ユーザーにレビューさせます。
+    ユーザーは適用したいタグを選択できます。
+    ユーザーは選択を承認または却下できます。その結果はJSONオブジェクトとして返されます。
+    - 却下された場合: `{ accepted: false }`
+    - 承認された場合: `{ accepted: true, tags: [{選択されたタグ}] }`
+
+    Args:
+        tags: タグオブジェクトのリスト。各オブジェクトにはタグ名と選択状態が含まれます。
+
+    Returns:
+        確認メッセージ。
+    """
+    logger.info(f"タグ候補数: {len(tags)}")
+    for i, tag in enumerate(tags):
+        logger.info(f"  タグ {i + 1}: {tag.name} (選択: {tag.selected})")
+    return f"{len(tags)}個のタグ候補を表示しました。ユーザーの選択をお待ちください。"
+
+
 def log_selected_frames(frames: List[dict]) -> None:
     """選択されたフレームをログに記録します。"""
     logger.info("=" * 50)
@@ -101,9 +125,11 @@ MOCK_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレーム�
 - ユーザーが指定した動画の内容を分析する
 - 動画から重要なシーンやフレームを抽出する
 - ユーザーが分析したいフレームを選択できるようにする
+- 選択されたフレームに基づいてタグ候補を提案する
 
 **ユーザーが動画に「タグをつける」または動画解析をリクエストした場合:**
 
+**ステップ1: フレーム抽出**
 1. 動画ファイルの実際のパスやURLは不要です。動画のタイトルから内容を推測してください。
 2. 必ず`extract_video_frames`ツールを使用してフレームを抽出する
 3. 6個のフレームを生成してください
@@ -113,11 +139,16 @@ MOCK_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレーム�
    - 画像URL（テスト用のダミー画像を使用）
 5. 初期状態ではすべてのフレームを「enabled」（選択済み）に設定
 
+**ステップ2: タグ提案**
+- ユーザーがフレームを承認したら、必ず`select_tags`ツールを呼び出す
+- 選択されたフレームの内容と動画タイトルから推測して、8個程度のタグ候補を生成
+- 各タグは初期状態で selected=true に設定
+- タグの例: 点検作業、設備確認、安全装備、製造ライン、品質管理、作業記録、定期点検、異常確認など
+
 **重要ルール:**
 - 動画ファイルへのアクセス情報は求めないでください。タイトルから推測して即座にフレームを生成してください。
 - ユーザーの入力なしに同じツールを連続して2回呼び出さない
 - ツールを呼び出した後、回答でリストを繰り返さない
-- フレーム選択後のタグ付けはフロントエンドで処理されます
 
 **画像URLについて:**
 - テスト用に以下のダミー画像URLを使用: https://picsum.photos/400/225?random=N（Nはフレーム番号）
@@ -170,7 +201,7 @@ logger.info(f"Using {'MOCK' if USE_MOCK else 'PRODUCTION'} system prompt")
 
 strands_agent = Agent(
     model=model,
-    tools=[extract_video_frames],
+    tools=[extract_video_frames, select_tags],
     system_prompt=system_prompt,
 )
 
@@ -187,34 +218,6 @@ app = create_strands_app(agui_agent, "/invocations")
 async def ping():
     """Health check endpoint for AWS Bedrock AgentCore."""
     return {"status": "healthy"}
-
-
-@app.post("/suggest_tags")
-async def suggest_tags(data: dict):
-    """選択されたフレームをログに記録し、タグ候補を生成するエンドポイント。"""
-    frames = data.get("frames", [])
-    video_title = data.get("video_title", "")
-
-    # 選択されたフレームをログに記録
-    log_selected_frames(frames)
-
-    logger.info(
-        f"タグ候補生成リクエスト: {len(frames)}フレーム, タイトル: {video_title}"
-    )
-
-    # モックのタグ候補を生成（TODO: 実際はLLMで生成）
-    tags = [
-        {"name": "点検作業", "selected": True},
-        {"name": "設備確認", "selected": True},
-        {"name": "安全装備", "selected": True},
-        {"name": "製造ライン", "selected": True},
-        {"name": "品質管理", "selected": True},
-        {"name": "作業記録", "selected": True},
-        {"name": "定期点検", "selected": True},
-        {"name": "異常確認", "selected": True},
-    ]
-
-    return {"tags": tags}
 
 
 if __name__ == "__main__":
