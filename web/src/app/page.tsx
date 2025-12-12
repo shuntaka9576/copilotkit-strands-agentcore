@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, createContext, useContext } from "react";
 import "@copilotkit/react-ui/styles.css";
-import { useHumanInTheLoop, useLangGraphInterrupt, useCopilotChat } from "@copilotkit/react-core";
+import { useHumanInTheLoop, useLangGraphInterrupt, useCopilotChat, useCopilotReadable } from "@copilotkit/react-core";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { useTheme } from "next-themes";
@@ -681,10 +681,18 @@ const VideoTable = () => {
   );
 };
 
-// ChatPanel - 右側チャット（入力欄なし、操作ボタンあり）
+// ChatPanel - 右側チャット
 const ChatPanel = () => {
   const { selectedVideo } = useSelectedVideo();
   const { theme } = useTheme();
+
+  // 選択中の動画情報をエージェントに渡す
+  useCopilotReadable({
+    description: "現在選択されている動画の情報",
+    value: selectedVideo
+      ? `選択中の動画: 「${selectedVideo.title}」（${selectedVideo.duration}）`
+      : "動画が選択されていません",
+  });
 
   useLangGraphInterrupt({
     render: ({ event, resolve }) => {
@@ -715,53 +723,76 @@ const ChatPanel = () => {
   });
 
   const { appendMessage } = useCopilotChat();
+  const [inputValue, setInputValue] = useState("");
 
-  const handleAddTags = () => {
-    if (!selectedVideo) return;
+  const initialMessage = selectedVideo
+    ? `「${selectedVideo.title}」が選択されています。フレーム抽出の条件を入力してください。\n例: 「10秒間隔で6フレーム抽出して」`
+    : "左のパネルから動画を選択してください。";
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputValue.trim() || !selectedVideo) return;
+
+    // 動画タイトルを含むメッセージを送信
+    const messageWithContext = `動画「${selectedVideo.title}」について: ${inputValue}`;
     appendMessage(
       new TextMessage({
         role: MessageRole.User,
-        content: `「${selectedVideo.title}」の動画にタグをつけてください`,
+        content: messageWithContext,
       })
     );
+    setInputValue("");
   };
 
   return (
     <div className="h-full flex flex-col">
-      {/* 操作パネル */}
-      <div className={`p-4 border-b ${theme === "dark" ? "border-slate-700" : "border-gray-200"}`}>
-        {selectedVideo ? (
-          <div className="flex items-center justify-between">
-            <div>
-              <span className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
-                選択中:
-              </span>
-              <span className={`ml-2 font-medium ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
-                {selectedVideo.title}
-              </span>
-            </div>
-            <button
-              onClick={handleAddTags}
-              className="px-4 py-2 text-sm font-medium rounded transition-colors bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              タグをつける
-            </button>
-          </div>
-        ) : (
-          <p className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
-            左のパネルから動画を選択してください
-          </p>
-        )}
-      </div>
+      {/* 選択中の動画情報 */}
+      {selectedVideo && (
+        <div className={`px-4 py-2 text-sm ${
+          theme === "dark"
+            ? "bg-slate-700 text-slate-200"
+            : "bg-blue-50 text-blue-800"
+        }`}>
+          選択中: {selectedVideo.title}
+        </div>
+      )}
       {/* チャット表示エリア */}
       <div className="flex-1">
         <CopilotChat
           className="h-full rounded-2xl [&_.copilotKitInput]:hidden"
           labels={{
-            initial: "動画を選択して「タグをつける」ボタンを押してください。",
+            initial: initialMessage,
           }}
         />
       </div>
+      {/* カスタム入力フォーム */}
+      <form onSubmit={handleSubmit} className={`p-4 border-t ${theme === "dark" ? "border-slate-700" : "border-gray-200"}`}>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={selectedVideo ? "フレーム抽出の条件を入力..." : "動画を選択してください"}
+            disabled={!selectedVideo}
+            className={`flex-1 px-4 py-2 rounded-lg border ${
+              theme === "dark"
+                ? "bg-slate-800 border-slate-600 text-white placeholder-slate-400"
+                : "bg-white border-gray-300 text-gray-800 placeholder-gray-400"
+            } ${!selectedVideo ? "opacity-50 cursor-not-allowed" : ""}`}
+          />
+          <button
+            type="submit"
+            disabled={!selectedVideo || !inputValue.trim()}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedVideo && inputValue.trim()
+                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+            }`}
+          >
+            送信
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

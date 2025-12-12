@@ -189,21 +189,18 @@ async def ping():
     return {"status": "healthy"}
 
 
-@app.post("/log_selected_frames")
-async def log_frames(data: dict):
-    """選択されたフレームをログに記録するエンドポイント。"""
-    frames = data.get("frames", [])
-    log_selected_frames(frames)
-    return {"status": "logged", "frame_count": len(frames)}
-
-
 @app.post("/suggest_tags")
 async def suggest_tags(data: dict):
-    """選択されたフレームに基づいてタグ候補を生成するエンドポイント。"""
+    """選択されたフレームをログに記録し、タグ候補を生成するエンドポイント。"""
     frames = data.get("frames", [])
     video_title = data.get("video_title", "")
 
-    logger.info(f"タグ候補生成リクエスト: {len(frames)}フレーム, タイトル: {video_title}")
+    # 選択されたフレームをログに記録
+    log_selected_frames(frames)
+
+    logger.info(
+        f"タグ候補生成リクエスト: {len(frames)}フレーム, タイトル: {video_title}"
+    )
 
     # モックのタグ候補を生成（TODO: 実際はLLMで生成）
     tags = [
