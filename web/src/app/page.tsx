@@ -1,10 +1,10 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, createContext, useContext } from "react";
 import "@copilotkit/react-ui/styles.css";
-import { useHumanInTheLoop, useLangGraphInterrupt } from "@copilotkit/react-core";
+import { useHumanInTheLoop, useLangGraphInterrupt, useCopilotChat } from "@copilotkit/react-core";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { useTheme } from "next-themes";
-
 
 interface Frame {
   description: string;
@@ -12,6 +12,29 @@ interface Frame {
   timestamp: string;
   image_url?: string;
 }
+
+// 動画の型定義
+interface Video {
+  id: string;
+  title: string;
+  thumbnail: string;
+  duration: string;
+  tags: string[];
+}
+
+// 選択状態のContext
+const SelectedVideoContext = createContext<{
+  selectedVideo: Video | null;
+  setSelectedVideo: React.Dispatch<React.SetStateAction<Video | null>>;
+} | null>(null);
+
+const useSelectedVideo = () => {
+  const context = useContext(SelectedVideoContext);
+  if (!context) {
+    throw new Error("useSelectedVideo must be used within SelectedVideoProvider");
+  }
+  return context;
+};
 
 // Shared UI Components
 const FrameContainer = ({ theme, children }: { theme?: string; children: React.ReactNode }) => (
@@ -358,6 +381,270 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
   );
 };
 
+// モック動画データ
+const mockVideos: Video[] = [
+  { id: "1", title: "製造ライン点検 2024-01-15", thumbnail: "https://picsum.photos/seed/video1/320/180", duration: "05:32", tags: [] },
+  { id: "2", title: "組立工程 A-Line", thumbnail: "https://picsum.photos/seed/video2/320/180", duration: "12:45", tags: [] },
+  { id: "3", title: "品質検査プロセス", thumbnail: "https://picsum.photos/seed/video3/320/180", duration: "08:20", tags: [] },
+  { id: "4", title: "設備メンテナンス記録", thumbnail: "https://picsum.photos/seed/video4/320/180", duration: "15:10", tags: [] },
+  { id: "5", title: "安全教育動画", thumbnail: "https://picsum.photos/seed/video5/320/180", duration: "20:00", tags: [] },
+];
+
+// 動画一覧テーブル（左パネル）
+const VideoTable = () => {
+  const { theme } = useTheme();
+  const { selectedVideo, setSelectedVideo } = useSelectedVideo();
+
+  return (
+    <div className="h-full flex flex-col">
+      <h2 className={`text-lg font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+        動画一覧
+      </h2>
+      <div className="flex-1 overflow-auto">
+        <table className="w-full">
+          <thead>
+            <tr className={`text-left text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+              <th className="pb-2 font-medium">サムネイル</th>
+              <th className="pb-2 font-medium">名前</th>
+              <th className="pb-2 font-medium">タグ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mockVideos.map((video) => (
+              <tr
+                key={video.id}
+                onClick={() => setSelectedVideo(video)}
+                className={`cursor-pointer transition-colors ${
+                  selectedVideo?.id === video.id
+                    ? theme === "dark"
+                      ? "bg-blue-900/50"
+                      : "bg-blue-100"
+                    : theme === "dark"
+                      ? "hover:bg-slate-700"
+                      : "hover:bg-gray-100"
+                }`}
+              >
+                <td className="py-2 pr-3">
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-20 h-12 object-cover rounded"
+                  />
+                </td>
+                <td className={`py-2 pr-3 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+                  <div className="text-sm font-medium">{video.title}</div>
+                  <div className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                    {video.duration}
+                  </div>
+                </td>
+                <td className="py-2">
+                  <div className="flex flex-wrap gap-1">
+                    {video.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className={`px-2 py-0.5 text-xs rounded ${
+                          theme === "dark"
+                            ? "bg-slate-600 text-slate-200"
+                            : "bg-gray-200 text-gray-700"
+                        }`}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {selectedVideo && (
+        <div className={`mt-4 p-3 rounded text-sm ${theme === "dark" ? "bg-slate-700 text-slate-200" : "bg-blue-50 text-blue-800"}`}>
+          選択中: {selectedVideo.title}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ChatPanel - 右側チャット（入力欄なし、操作ボタンあり）
+const ChatPanel = () => {
+  const { selectedVideo } = useSelectedVideo();
+  const { theme } = useTheme();
+
+  useLangGraphInterrupt({
+    render: ({ event, resolve }) => {
+      return <InterruptHumanInTheLoop event={event} resolve={resolve} />;
+    },
+  });
+
+  useHumanInTheLoop({
+    name: "extract_video_frames",
+    description: "動画からフレームを抽出し、ユーザーに選択させます",
+    parameters: [
+      {
+        name: "frames",
+        type: "object[]",
+        attributes: [
+          { name: "description", type: "string" },
+          { name: "status", type: "string", enum: ["enabled", "disabled", "executing"] },
+          { name: "timestamp", type: "string" },
+          { name: "image_url", type: "string" },
+        ],
+      },
+    ],
+    available: "enabled",
+    render: ({ args, respond, status }) => {
+      return <FramesFeedback args={args} respond={respond} status={status} />;
+    },
+  });
+
+  const { appendMessage } = useCopilotChat();
+
+  const handleAddTags = () => {
+    if (!selectedVideo) return;
+    appendMessage(
+      new TextMessage({
+        role: MessageRole.User,
+        content: `「${selectedVideo.title}」の動画にタグをつけてください`,
+      })
+    );
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* 操作パネル */}
+      <div className={`p-4 border-b ${theme === "dark" ? "border-slate-700" : "border-gray-200"}`}>
+        {selectedVideo ? (
+          <div className="flex items-center justify-between">
+            <div>
+              <span className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                選択中:
+              </span>
+              <span className={`ml-2 font-medium ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+                {selectedVideo.title}
+              </span>
+            </div>
+            <button
+              onClick={handleAddTags}
+              className="px-4 py-2 text-sm font-medium rounded transition-colors bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              タグをつける
+            </button>
+          </div>
+        ) : (
+          <p className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+            左のパネルから動画を選択してください
+          </p>
+        )}
+      </div>
+      {/* チャット表示エリア */}
+      <div className="flex-1">
+        <CopilotChat
+          className="h-full rounded-2xl [&_.copilotKitInput]:hidden"
+          labels={{
+            initial: "動画を選択して「タグをつける」ボタンを押してください。",
+          }}
+        />
+      </div>
+    </div>
+  );
+};
+
+// 動画テーブル（選択のみ）
+const VideoTableWithActions = () => {
+  const { theme } = useTheme();
+  const { selectedVideo, setSelectedVideo } = useSelectedVideo();
+
+  return (
+    <div className="h-full flex flex-col">
+      <h2 className={`text-lg font-semibold mb-4 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+        動画一覧
+      </h2>
+      <div className="flex-1 overflow-auto">
+        <table className="w-full">
+          <thead>
+            <tr className={`text-left text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+              <th className="pb-2 font-medium">サムネイル</th>
+              <th className="pb-2 font-medium">名前</th>
+              <th className="pb-2 font-medium">タグ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mockVideos.map((video) => (
+              <tr
+                key={video.id}
+                onClick={() => setSelectedVideo(video)}
+                className={`cursor-pointer transition-colors ${
+                  selectedVideo?.id === video.id
+                    ? theme === "dark"
+                      ? "bg-blue-900/50"
+                      : "bg-blue-100"
+                    : theme === "dark"
+                      ? "hover:bg-slate-700"
+                      : "hover:bg-gray-100"
+                }`}
+              >
+                <td className="py-2 pr-3">
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    className="w-20 h-12 object-cover rounded"
+                  />
+                </td>
+                <td className={`py-2 pr-3 ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+                  <div className="text-sm font-medium">{video.title}</div>
+                  <div className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+                    {video.duration}
+                  </div>
+                </td>
+                <td className="py-2 pr-3">
+                  <div className="flex flex-wrap gap-1">
+                    {video.tags.length > 0 ? (
+                      video.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className={`px-2 py-0.5 text-xs rounded ${
+                            theme === "dark"
+                              ? "bg-slate-600 text-slate-200"
+                              : "bg-gray-200 text-gray-700"
+                          }`}
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className={`text-xs ${theme === "dark" ? "text-slate-500" : "text-gray-400"}`}>
+                        -
+                      </span>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 export default function Page() {
-  return <Chat />;
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const { theme } = useTheme();
+
+  return (
+    <SelectedVideoContext.Provider value={{ selectedVideo, setSelectedVideo }}>
+      <div className="flex h-screen">
+        {/* 左側: 動画一覧 */}
+        <div className={`w-2/5 p-6 border-r overflow-auto ${theme === "dark" ? "border-slate-700 bg-slate-900" : "border-gray-200 bg-gray-50"}`}>
+          <VideoTableWithActions />
+        </div>
+        {/* 右側: チャット（入力欄なし） */}
+        <div className="w-3/5 p-4">
+          <ChatPanel />
+        </div>
+      </div>
+    </SelectedVideoContext.Provider>
+  );
 }
