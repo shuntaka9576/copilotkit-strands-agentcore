@@ -97,11 +97,13 @@ const ActionButton = ({
   variant,
   theme,
   onClick,
+  disabled = false,
   children,
 }: {
   variant: "primary" | "secondary";
   theme?: string;
   onClick: () => void;
+  disabled?: boolean;
   children: React.ReactNode;
 }) => {
   const baseClasses = "px-5 py-2 rounded font-medium text-sm transition-colors";
@@ -117,10 +119,13 @@ const ActionButton = ({
         : "bg-gray-200 hover:bg-gray-300 text-gray-700",
   };
 
+  const disabledClasses = "opacity-50 cursor-not-allowed";
+
   return (
     <button
-      className={`${baseClasses} ${variantClasses[variant]}`}
+      className={`${baseClasses} ${disabled ? disabledClasses : variantClasses[variant]}`}
       onClick={onClick}
+      disabled={disabled}
     >
       {children}
     </button>
@@ -322,11 +327,11 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
       {/* Action Buttons */}
       {accepted === null && (
         <div className="flex justify-end gap-3">
-          <ActionButton variant="secondary" theme={theme} onClick={handleReject}>
+          <ActionButton variant="secondary" theme={theme} onClick={handleReject} disabled={!respond}>
             キャンセル
           </ActionButton>
-          <ActionButton variant="primary" theme={theme} onClick={handleConfirm}>
-            解析実行
+          <ActionButton variant="primary" theme={theme} onClick={handleConfirm} disabled={!respond}>
+            {respond ? "解析実行" : "準備中..."}
           </ActionButton>
         </div>
       )}
