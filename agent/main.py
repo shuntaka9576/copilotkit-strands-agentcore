@@ -5,6 +5,7 @@ for human-in-the-loop interactions, where users can review and select video fram
 """
 
 import logging
+import os
 from typing import List, Literal
 
 from pydantic import BaseModel, Field
@@ -79,10 +80,44 @@ model = BedrockModel(
     region_name="ap-northeast-1",
 )
 
-strands_agent = Agent(
-    model=model,
-    tools=[extract_video_frames],
-    system_prompt="""あなたは動画を解析し、重要なフレームを抽出する動画解析アシスタントです。
+# モック用プロンプト（動画ファイル不要、タイトルから推測）
+MOCK_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレームを抽出する動画解析アシスタントです。
+必ず日本語で回答してください。
+
+**あなたの主な役割:**
+- ユーザーが指定した動画の内容を分析する
+- 動画から重要なシーンやフレームを抽出する
+- ユーザーが分析したいフレームを選択できるようにする
+
+**ユーザーが動画に「タグをつける」または動画解析をリクエストした場合:**
+1. 動画ファイルの実際のパスやURLは不要です。動画のタイトルから内容を推測してください。
+2. 必ず`extract_video_frames`ツールを使用してフレームを抽出する
+3. 6個のフレームを生成してください
+4. 各フレームには:
+   - 動画タイトルから推測した簡潔な説明（何が映っているか）
+   - タイムスタンプ（例: 00:01:23）
+   - 画像URL（テスト用のダミー画像を使用）
+5. 初期状態ではすべてのフレームを「enabled」（選択済み）に設定
+6. ユーザーがフレームをレビューした後:
+   - 承認された場合: 選択されたフレームについてタグを提案
+   - 拒否された場合: 何を変更したいか尋ねる
+
+**重要:**
+- 動画ファイルへのアクセス情報は求めないでください。タイトルから推測して即座にフレームを生成してください。
+- ユーザーの入力なしに`extract_video_frames`を連続して2回呼び出さない
+- ツールを呼び出した後、回答でフレームのリストを繰り返さない
+
+**画像URLについて:**
+- テスト用に以下のダミー画像URLを使用: https://picsum.photos/400/225?random=N（Nはフレーム番号）
+- 例: image_url="https://picsum.photos/400/225?random=1"
+
+**タイムスタンプの形式:**
+- HH:MM:SS形式で指定（例: 00:01:23）
+- 5分程度の動画を想定し、適切な間隔でフレームを抽出する
+"""
+
+# 本番用プロンプト（実際の動画ファイル情報が必要）
+PRODUCTION_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレームを抽出する動画解析アシスタントです。
 必ず日本語で回答してください。
 
 **あなたの主な役割:**
@@ -91,13 +126,18 @@ strands_agent = Agent(
 - ユーザーが分析したいフレームを選択できるようにする
 
 **ユーザーが動画解析をリクエストした場合:**
-1. 必ず`extract_video_frames`ツールを使用してフレームを抽出する
-2. 各フレームには:
+1. 動画ファイルのパス、URL、またはIDを確認してください
+2. 必要な情報が不足している場合は、ユーザーに以下を尋ねてください:
+   - 動画ファイルのパスまたはURL
+   - 抽出したいフレームの条件（オプション）
+   - 動画の長さ（オプション）
+3. 情報が揃ったら`extract_video_frames`ツールを使用してフレームを抽出する
+4. 各フレームには:
    - 簡潔な説明（何が映っているか）
    - タイムスタンプ（例: 00:01:23）
-   - 画像URL（テスト用のダミー画像を使用）
-3. 初期状態ではすべてのフレームを「enabled」（選択済み）に設定し、ユーザーに除外するフレームを選ばせる
-4. ユーザーがフレームをレビューした後:
+   - 画像URL
+5. 初期状態ではすべてのフレームを「enabled」（選択済み）に設定し、ユーザーに除外するフレームを選ばせる
+6. ユーザーがフレームをレビューした後:
    - 承認された場合: 選択されたフレームについて詳細な分析を提供
    - 拒否された場合: 何を変更したいか尋ねる
 
@@ -106,14 +146,20 @@ strands_agent = Agent(
 - ツールを呼び出した後、回答でフレームのリストを繰り返さない
 - 選択されたフレームについて簡潔で有益な分析を提供する
 
-**画像URLについて:**
-- テスト用に以下のダミー画像URLを使用: https://picsum.photos/400/225?random=N（Nはフレーム番号）
-- 例: image_url="https://picsum.photos/400/225?random=1"
-
 **タイムスタンプの形式:**
 - HH:MM:SS形式で指定（例: 00:01:23）
 - 動画の長さに応じて適切な間隔でフレームを抽出する
-""",
+"""
+
+# 環境変数でプロンプトを切り替え（MOCK_MODE=true でモック用）
+USE_MOCK = os.getenv("MOCK_MODE", "false").lower() == "true"
+system_prompt = MOCK_SYSTEM_PROMPT if USE_MOCK else PRODUCTION_SYSTEM_PROMPT
+logger.info(f"Using {'MOCK' if USE_MOCK else 'PRODUCTION'} system prompt")
+
+strands_agent = Agent(
+    model=model,
+    tools=[extract_video_frames],
+    system_prompt=system_prompt,
 )
 
 agui_agent = StrandsAgent(
