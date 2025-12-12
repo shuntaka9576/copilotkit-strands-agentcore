@@ -13,6 +13,11 @@ interface Frame {
   image_url?: string;
 }
 
+interface Tag {
+  name: string;
+  selected: boolean;
+}
+
 // 動画の型定義
 interface Video {
   id: string;
@@ -274,6 +279,8 @@ const Chat = () => {
 const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; status: any }) => {
   const { theme } = useTheme();
   const [localFrames, setLocalFrames] = useState<Frame[]>([]);
+  const [step, setStep] = useState<"frames" | "tags" | "done">("frames");
+  const [localTags, setLocalTags] = useState<Tag[]>([]);
   const [accepted, setAccepted] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -306,28 +313,139 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
     }
   };
 
-  const handleConfirm = async () => {
+  // フレーム選択完了 → タグ選択へ
+  const handleFrameConfirm = async () => {
+    const selectedFrames = localFrames.filter((frame) => frame.status === "enabled");
+
+    // サーバーにログを送信
+    try {
+      await fetch("http://localhost:8080/log_selected_frames", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frames: selectedFrames }),
+      });
+    } catch (error) {
+      console.error("ログ送信エラー:", error);
+    }
+
+    // モックのタグ候補を生成（TODO: 実際はLLMで生成）
+    const mockTags: Tag[] = [
+      { name: "点検作業", selected: true },
+      { name: "設備確認", selected: true },
+      { name: "安全装備", selected: true },
+      { name: "製造ライン", selected: true },
+      { name: "品質管理", selected: true },
+      { name: "作業記録", selected: true },
+      { name: "定期点検", selected: true },
+      { name: "異常確認", selected: true },
+    ];
+    setLocalTags(mockTags);
+    setStep("tags");
+  };
+
+  const handleTagToggle = (index: number) => {
+    setLocalTags((prevTags) =>
+      prevTags.map((tag, i) =>
+        i === index ? { ...tag, selected: !tag.selected } : tag
+      )
+    );
+  };
+
+  // タグ選択完了 → respond
+  const handleTagConfirm = () => {
     if (respond) {
       const selectedFrames = localFrames.filter((frame) => frame.status === "enabled");
+      const selectedTags = localTags.filter((tag) => tag.selected);
       setAccepted(true);
-
-      // サーバーにログを送信
-      try {
-        await fetch("http://localhost:8080/log_selected_frames", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ frames: selectedFrames }),
-        });
-      } catch (error) {
-        console.error("ログ送信エラー:", error);
-      }
-
-      respond({ accepted: true, frames: selectedFrames });
+      setStep("done");
+      respond({ accepted: true, frames: selectedFrames, tags: selectedTags });
     }
   };
 
+  const selectedTagCount = localTags.filter((tag) => tag.selected).length;
+
+  // タグ選択UI
+  if (step === "tags") {
+    return (
+      <div data-testid="select-tags" className="flex">
+        <div
+          className={`rounded-lg w-[600px] p-5 ${
+            theme === "dark"
+              ? "bg-slate-800 text-white border border-slate-600"
+              : "bg-white text-gray-800 border border-gray-300"
+          }`}
+        >
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300 dark:border-slate-600">
+            <h2 className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+              タグを選択
+            </h2>
+            <div className={`text-sm font-medium ${theme === "dark" ? "text-slate-300" : "text-gray-600"}`}>
+              選択中: {selectedTagCount} / {localTags.length}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-6">
+            {localTags.map((tag, index) => (
+              <div
+                key={index}
+                onClick={() => handleTagToggle(index)}
+                className={`relative px-4 py-2 rounded-lg cursor-pointer transition-all border-2 ${
+                  tag.selected
+                    ? "bg-blue-600 text-white border-blue-500"
+                    : theme === "dark"
+                      ? "bg-slate-600 text-slate-300 border-slate-500 opacity-50"
+                      : "bg-gray-200 text-gray-500 border-gray-300 opacity-50"
+                }`}
+              >
+                <span className="text-sm font-medium">{tag.name}</span>
+                {!tag.selected && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className={`text-xs px-1 rounded ${
+                      theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-white text-gray-600"
+                    }`}>
+                      除外
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <ActionButton variant="secondary" theme={theme} onClick={handleReject}>
+              キャンセル
+            </ActionButton>
+            <ActionButton variant="primary" theme={theme} onClick={handleTagConfirm}>
+              タグを確定
+            </ActionButton>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 完了UI
+  if (step === "done") {
+    return (
+      <div className="flex">
+        <div
+          className={`px-4 py-2 rounded text-sm font-medium ${
+            accepted
+              ? theme === "dark"
+                ? "bg-green-800 text-green-100"
+                : "bg-green-100 text-green-800"
+              : theme === "dark"
+                ? "bg-gray-700 text-gray-300"
+                : "bg-gray-100 text-gray-600"
+          }`}
+        >
+          {accepted ? "タグを適用しました" : "キャンセルしました"}
+        </div>
+      </div>
+    );
+  }
+
+  // フレーム選択UI
   return (
     <FrameContainer theme={theme}>
       <FrameHeader
@@ -347,37 +465,141 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
         ))}
       </div>
 
-      {/* Action Buttons */}
       {accepted === null && (
         <div className="flex justify-end gap-3">
           <ActionButton variant="secondary" theme={theme} onClick={handleReject} disabled={!respond}>
             キャンセル
           </ActionButton>
-          <ActionButton variant="primary" theme={theme} onClick={handleConfirm} disabled={!respond}>
+          <ActionButton variant="primary" theme={theme} onClick={handleFrameConfirm} disabled={!respond}>
             {respond ? "解析実行" : "準備中..."}
           </ActionButton>
         </div>
       )}
+    </FrameContainer>
+  );
+};
 
-      {/* Result State */}
-      {accepted !== null && (
-        <div className="flex justify-end">
-          <div
-            className={`px-4 py-2 rounded text-sm font-medium ${
-              accepted
-                ? theme === "dark"
-                  ? "bg-green-800 text-green-100"
-                  : "bg-green-100 text-green-800"
-                : theme === "dark"
-                  ? "bg-gray-700 text-gray-300"
-                  : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            {accepted ? "解析実行中..." : "キャンセルしました"}
+// タグ選択UI
+const TagsFeedback = ({ args, respond, status }: { args: any; respond: any; status: any }) => {
+  const { theme } = useTheme();
+  const [localTags, setLocalTags] = useState<Tag[]>([]);
+  const [accepted, setAccepted] = useState<boolean | null>(null);
+
+  // デバッグログ
+  console.log("TagsFeedback args:", args);
+  console.log("TagsFeedback status:", status);
+
+  useEffect(() => {
+    if (args.tags && args.tags.length > 0 && localTags.length === 0) {
+      setLocalTags(args.tags);
+    }
+  }, [args.tags, localTags]);
+
+  if (args.tags === undefined || args.tags.length === 0) {
+    return <></>;
+  }
+
+  const tags = localTags.length > 0 ? localTags : args.tags;
+  const selectedCount = tags.filter((tag: Tag) => tag.selected).length;
+
+  const handleTagToggle = (index: number) => {
+    setLocalTags((prevTags) =>
+      prevTags.map((tag, i) =>
+        i === index ? { ...tag, selected: !tag.selected } : tag
+      )
+    );
+  };
+
+  const handleReject = () => {
+    if (respond) {
+      setAccepted(false);
+      respond({ accepted: false });
+    }
+  };
+
+  const handleConfirm = () => {
+    if (respond) {
+      const selectedTags = localTags.filter((tag) => tag.selected);
+      setAccepted(true);
+      respond({ accepted: true, tags: selectedTags });
+    }
+  };
+
+  return (
+    <div data-testid="select-tags" className="flex">
+      <div
+        className={`rounded-lg w-[600px] p-5 ${
+          theme === "dark"
+            ? "bg-slate-800 text-white border border-slate-600"
+            : "bg-white text-gray-800 border border-gray-300"
+        }`}
+      >
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300 dark:border-slate-600">
+          <h2 className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+            タグを選択
+          </h2>
+          <div className={`text-sm font-medium ${theme === "dark" ? "text-slate-300" : "text-gray-600"}`}>
+            選択中: {selectedCount} / {tags.length}
           </div>
         </div>
-      )}
-    </FrameContainer>
+
+        <div className="flex flex-wrap gap-2 mb-6">
+          {tags.map((tag: Tag, index: number) => (
+            <div
+              key={index}
+              onClick={() => handleTagToggle(index)}
+              className={`relative px-4 py-2 rounded-lg cursor-pointer transition-all border-2 ${
+                tag.selected
+                  ? "bg-blue-600 text-white border-blue-500"
+                  : theme === "dark"
+                    ? "bg-slate-600 text-slate-300 border-slate-500 opacity-50"
+                    : "bg-gray-200 text-gray-500 border-gray-300 opacity-50"
+              }`}
+            >
+              <span className="text-sm font-medium">{tag.name}</span>
+              {!tag.selected && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={`text-xs px-1 rounded ${
+                    theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-white text-gray-600"
+                  }`}>
+                    除外
+                  </span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {accepted === null && (
+          <div className="flex justify-end gap-3">
+            <ActionButton variant="secondary" theme={theme} onClick={handleReject} disabled={!respond}>
+              キャンセル
+            </ActionButton>
+            <ActionButton variant="primary" theme={theme} onClick={handleConfirm} disabled={!respond}>
+              {respond ? "タグを確定" : "準備中..."}
+            </ActionButton>
+          </div>
+        )}
+
+        {accepted !== null && (
+          <div className="flex justify-end">
+            <div
+              className={`px-4 py-2 rounded text-sm font-medium ${
+                accepted
+                  ? theme === "dark"
+                    ? "bg-green-800 text-green-100"
+                    : "bg-green-100 text-green-800"
+                  : theme === "dark"
+                    ? "bg-gray-700 text-gray-300"
+                    : "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {accepted ? "タグを適用しました" : "キャンセルしました"}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -479,6 +701,26 @@ const ChatPanel = () => {
   });
 
   useHumanInTheLoop({
+    name: "select_tags",
+    description: "タグ候補を表示し、ユーザーに選択させます",
+    parameters: [
+      {
+        name: "tags",
+        type: "object[]",
+        attributes: [
+          { name: "name", type: "string" },
+          { name: "selected", type: "boolean" },
+        ],
+      },
+    ],
+    available: "enabled",
+    render: ({ args, respond, status }) => {
+      console.log("useHumanInTheLoop select_tags render called", { args, status });
+      return <TagsFeedback args={args} respond={respond} status={status} />;
+    },
+  });
+
+  useHumanInTheLoop({
     name: "extract_video_frames",
     description: "動画からフレームを抽出し、ユーザーに選択させます",
     parameters: [
@@ -495,6 +737,7 @@ const ChatPanel = () => {
     ],
     available: "enabled",
     render: ({ args, respond, status }) => {
+      console.log("useHumanInTheLoop extract_video_frames render called", { args, status });
       return <FramesFeedback args={args} respond={respond} status={status} />;
     },
   });

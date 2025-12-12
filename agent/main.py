@@ -39,6 +39,40 @@ class Frame(BaseModel):
     )
 
 
+class Tag(BaseModel):
+    """タグの候補。"""
+
+    name: str = Field(
+        ...,
+        description="タグ名",
+    )
+    selected: bool = Field(
+        default=True,
+        description="タグが選択されているかどうか",
+    )
+
+
+@tool
+def select_tags(
+    tags: List[Tag],
+) -> str:
+    """タグ候補を表示し、ユーザーに選択させます。
+
+    このツールは、画像解析から推測したタグ候補のリストを作成し、ユーザーにレビューさせます。
+    ユーザーは適用したいタグを選択できます。
+
+    Args:
+        tags: タグオブジェクトのリスト。各オブジェクトにはタグ名と選択状態が含まれます。
+
+    Returns:
+        確認メッセージ。
+    """
+    logger.info(f"タグ候補数: {len(tags)}")
+    for i, tag in enumerate(tags):
+        logger.info(f"  タグ {i + 1}: {tag.name} (選択: {tag.selected})")
+    return f"{len(tags)}個のタグ候補を表示しました。ユーザーの選択をお待ちください。"
+
+
 @tool
 def extract_video_frames(
     frames: List[Frame],
@@ -61,7 +95,7 @@ def extract_video_frames(
     """
     logger.info(f"抽出されたフレーム数: {len(frames)}")
     for i, frame in enumerate(frames):
-        logger.info(f"  フレーム {i+1}: {frame.timestamp} - {frame.description}")
+        logger.info(f"  フレーム {i + 1}: {frame.timestamp} - {frame.description}")
     return f"{len(frames)}個のフレームを抽出しました。ユーザーの選択をお待ちください。"
 
 
@@ -71,7 +105,9 @@ def log_selected_frames(frames: List[dict]) -> None:
     logger.info("ユーザーが選択したフレーム:")
     logger.info("=" * 50)
     for i, frame in enumerate(frames):
-        logger.info(f"  [{i+1}] {frame.get('timestamp', 'N/A')} - {frame.get('description', 'N/A')}")
+        logger.info(
+            f"  [{i + 1}] {frame.get('timestamp', 'N/A')} - {frame.get('description', 'N/A')}"
+        )
     logger.info("=" * 50)
 
 
@@ -88,8 +124,11 @@ MOCK_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレーム�
 - ユーザーが指定した動画の内容を分析する
 - 動画から重要なシーンやフレームを抽出する
 - ユーザーが分析したいフレームを選択できるようにする
+- 選択されたフレームに基づいてタグ候補を提案する
 
 **ユーザーが動画に「タグをつける」または動画解析をリクエストした場合:**
+
+**ステップ1: フレーム抽出**
 1. 動画ファイルの実際のパスやURLは不要です。動画のタイトルから内容を推測してください。
 2. 必ず`extract_video_frames`ツールを使用してフレームを抽出する
 3. 6個のフレームを生成してください
@@ -98,14 +137,15 @@ MOCK_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレーム�
    - タイムスタンプ（例: 00:01:23）
    - 画像URL（テスト用のダミー画像を使用）
 5. 初期状態ではすべてのフレームを「enabled」（選択済み）に設定
-6. ユーザーがフレームをレビューした後:
-   - 承認された場合: 選択されたフレームについてタグを提案
-   - 拒否された場合: 何を変更したいか尋ねる
 
-**重要:**
+**ステップ2: フレーム選択後**
+- ユーザーがフレームを承認したら、「タグ選択に進みます」と簡潔に回答してください
+- タグ選択はフロントエンド側で処理されます
+
+**重要ルール:**
 - 動画ファイルへのアクセス情報は求めないでください。タイトルから推測して即座にフレームを生成してください。
-- ユーザーの入力なしに`extract_video_frames`を連続して2回呼び出さない
-- ツールを呼び出した後、回答でフレームのリストを繰り返さない
+- ユーザーの入力なしに同じツールを連続して2回呼び出さない
+- ツールを呼び出した後、回答でリストを繰り返さない
 
 **画像URLについて:**
 - テスト用に以下のダミー画像URLを使用: https://picsum.photos/400/225?random=N（Nはフレーム番号）
@@ -151,14 +191,14 @@ PRODUCTION_SYSTEM_PROMPT = """あなたは動画を解析し、重要なフレ�
 - 動画の長さに応じて適切な間隔でフレームを抽出する
 """
 
-# 環境変数でプロンプトを切り替え（MOCK_MODE=true でモック用）
-USE_MOCK = os.getenv("MOCK_MODE", "false").lower() == "true"
+# 環境変数でプロンプトを切り替え（MOCK_MODE=false で本番用）
+USE_MOCK = os.getenv("MOCK_MODE", "true").lower() == "true"
 system_prompt = MOCK_SYSTEM_PROMPT if USE_MOCK else PRODUCTION_SYSTEM_PROMPT
 logger.info(f"Using {'MOCK' if USE_MOCK else 'PRODUCTION'} system prompt")
 
 strands_agent = Agent(
     model=model,
-    tools=[extract_video_frames],
+    tools=[extract_video_frames, select_tags],
     system_prompt=system_prompt,
 )
 
