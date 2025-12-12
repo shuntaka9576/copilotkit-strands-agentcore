@@ -1,30 +1,29 @@
-"use client";
+'use client';
 
 import {
-  useDefaultTool,
-  useRenderToolCall,
-  useFrontendTool,
   useCoAgent,
-} from "@copilotkit/react-core";
-import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useEffect, useState } from "react";
-import { DefaultToolComponent } from "@/components/default-tool-ui";
-import { WeatherCard } from "@/components/weather";
+  useDefaultTool,
+  useFrontendTool,
+  useRenderToolCall,
+} from '@copilotkit/react-core';
+import {
+  type CopilotKitCSSProperties,
+  CopilotSidebar,
+} from '@copilotkit/react-ui';
+import { useState } from 'react';
+import { DefaultToolComponent } from '@/components/default-tool-ui';
+import { WeatherCard } from '@/components/weather';
 
 export default function CopilotKitPage() {
-  const [themeColor, setThemeColor] = useState("#6366f1");
-
-  useEffect(() => {
-    console.log(themeColor);
-  }, [themeColor]);
+  const [themeColor, setThemeColor] = useState('#6366f1');
 
   // 🪁 Frontend Actions: https://docs.copilotkit.ai/guides/frontend-actions
   useFrontendTool({
-    name: "set_theme_color",
+    name: 'set_theme_color',
     parameters: [
       {
-        name: "theme_color",
-        description: "The theme color to set. Make sure to pick nice colors.",
+        name: 'theme_color',
+        description: 'The theme color to set. Make sure to pick nice colors.',
         required: true,
       },
     ],
@@ -36,7 +35,7 @@ export default function CopilotKitPage() {
   return (
     <main
       style={
-        { "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties
+        { '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties
       }
     >
       <CopilotSidebar
@@ -44,22 +43,22 @@ export default function CopilotKitPage() {
         defaultOpen={true}
         // Adds an initial message to the chat
         labels={{
-          title: "Popup Assistant",
+          title: 'Popup Assistant',
           initial: "👋 Hi, there! You're chatting with an Strands agent.",
         }}
         // Suggestions for guiding users
         suggestions={[
           {
-            title: "Generative UI",
+            title: 'Generative UI',
             message: "What's the weather in San Francisco?",
           },
           {
-            title: "Frontend Tools",
-            message: "Set the theme to green.",
+            title: 'Frontend Tools',
+            message: 'Set the theme to green.',
           },
           {
-            title: "Writing Agent State",
-            message: "Add a proverb about AI.",
+            title: 'Writing Agent State',
+            message: 'Add a proverb about AI.',
           },
         ]}
       >
@@ -73,26 +72,22 @@ export default function CopilotKitPage() {
 function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Use CoAgent to get shared state from backend
   const { state, setState } = useCoAgent({
-    name: "strands_agent",
+    name: 'strands_agent',
     initialState: {
       proverbs: [
-        "CopilotKit may be new, but its the best thing since sliced bread.",
+        'CopilotKit may be new, but its the best thing since sliced bread.',
       ],
     },
   });
 
-  useEffect(() => {
-    console.log("State updated:", state);
-  }, [state]);
-
   //🪁 Generative UI: https://docs.copilotkit.ai/strands/generative-ui/backend-tools
   useRenderToolCall(
     {
-      name: "get_weather",
+      name: 'get_weather',
       parameters: [
         {
-          name: "location",
-          description: "The location to get the weather for.",
+          name: 'location',
+          description: 'The location to get the weather for.',
           required: true,
         },
       ],
@@ -100,7 +95,7 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
         <WeatherCard themeColor={themeColor} location={props.args.location} />
       ),
     },
-    [themeColor],
+    [themeColor]
   );
 
   //🪁 Default Generative UI: https://docs.copilotkit.ai/strands/generative-ui/backend-tools
@@ -110,7 +105,7 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
         <DefaultToolComponent themeColor={themeColor} {...props} />
       ),
     },
-    [themeColor],
+    [themeColor]
   );
 
   return (
@@ -134,6 +129,7 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
             >
               <p className="pr-8">{proverb}</p>
               <button
+                type="button"
                 onClick={() =>
                   setState({
                     ...state,

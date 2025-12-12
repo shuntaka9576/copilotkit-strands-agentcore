@@ -9,6 +9,7 @@ function SunIcon() {
       viewBox="0 0 24 24"
       fill="currentColor"
       className="w-14 h-14 text-yellow-200"
+      aria-hidden="true"
     >
       <circle cx="12" cy="12" r="5" />
       <path
@@ -30,7 +31,7 @@ export function WeatherCard({ themeColor, location }: WeatherCardProps) {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-xl font-bold text-white capitalize">
-              {location || "Unknown Location"}
+              {location || 'Unknown Location'}
             </h3>
             <p className="text-white">Current Weather</p>
           </div>

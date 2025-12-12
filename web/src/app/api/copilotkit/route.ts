@@ -1,11 +1,10 @@
+import { HttpAgent } from '@ag-ui/client';
 import {
   CopilotRuntime,
-  ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
-} from "@copilotkit/runtime";
-
-import { HttpAgent } from "@ag-ui/client";
-import { NextRequest } from "next/server";
+  ExperimentalEmptyAdapter,
+} from '@copilotkit/runtime';
+import type { NextRequest } from 'next/server';
 
 // 1. You can use any service adapter here for multi-agent support. We use
 //    the empty adapter since we're only using one agent.
@@ -16,7 +15,7 @@ const serviceAdapter = new ExperimentalEmptyAdapter();
 const runtime = new CopilotRuntime({
   agents: {
     // Our FastAPI endpoint URL
-    strands_agent: new HttpAgent({ url: "http://localhost:8080/invocations" }),
+    strands_agent: new HttpAgent({ url: 'http://localhost:8080/invocations' }),
   },
 });
 
@@ -25,7 +24,7 @@ export const POST = async (req: NextRequest) => {
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime,
     serviceAdapter,
-    endpoint: "/api/copilotkit",
+    endpoint: '/api/copilotkit',
   });
 
   return handleRequest(req);

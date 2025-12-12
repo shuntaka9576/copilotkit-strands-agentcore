@@ -1,0 +1,70 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+  "root": true,
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space"
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules/**",
+      "!**/.next/**",
+      "!**/cdk.out/**",
+      "!**/.turbo/**",
+      "!**/.venv/**",
+      "!**/venv/**",
+      "!**/__pycache__/**",
+      "!**/out/**",
+      "!**/build/**",
+      "!**/dist/**",
+      "!**/*.py",
+      "!.claude/settings.local.json",
+      "!**/next-env.d.ts"
+    ]
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "trailingCommas": "es5"
+    },
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "correctness": {
+        "noUnusedImports": {
+          "level": "error"
+        },
+        "noUnusedVariables": {
+          "level": "error"
+        }
+      },
+      "suspicious": {
+        "noConsole": "error",
+        "noExplicitAny": "error",
+        "noArrayIndexKey": "off"
+      },
+      "complexity": {
+        "noUselessConstructor": "off"
+      },
+      "style": {
+        "noUselessElse": "off",
+        "noUnusedTemplateLiteral": "off",
+        "noNonNullAssertion": "off",
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error"
+      }
+    }
+  }
+}
