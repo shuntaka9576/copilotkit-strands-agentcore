@@ -15,7 +15,7 @@ const serviceAdapter = new ExperimentalEmptyAdapter();
 const runtime = new CopilotRuntime({
   agents: {
     // Our FastAPI endpoint URL
-    strands_agent: new HttpAgent({ url: 'http://localhost:8080/invocations' }),
+    human_in_the_loop: new HttpAgent({ url: 'http://localhost:8080/invocations' }),
   },
 });
 

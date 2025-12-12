@@ -1,151 +1,107 @@
-"""Strands AG-UI Integration Example - Proverbs Agent.
+"""Human in the Loop example for AWS Strands.
 
-This example demonstrates a Strands agent integrated with AG-UI, featuring:
-- Shared state management between agent and UI
-- Backend tool execution (get_weather, update_proverbs)
-- Frontend tools (set_theme_color)
-- Generative UI rendering
+This example demonstrates how to create a Strands agent with a generate_task_steps tool
+for human-in-the-loop interactions, where users can review and approve task steps before execution.
 """
 
-import json
-from typing import List
+from typing import List, Literal
 
-from ag_ui_strands import (
-    StrandsAgent,
-    StrandsAgentConfig,
-    ToolBehavior,
-    create_strands_app,
-)
 from pydantic import BaseModel, Field
 from strands import Agent, tool
 from strands.models import BedrockModel
+from ag_ui_strands import StrandsAgent, create_strands_app
 
 
-class ProverbsList(BaseModel):
-    """A list of proverbs."""
+class Step(BaseModel):
+    """A single step in a task plan."""
 
-    proverbs: List[str] = Field(description="The complete list of proverbs")
-
-
-@tool
-def get_weather(location: str):
-    """Get the weather for a location.
-
-    Args:
-        location: The location to get weather for
-
-    Returns:
-        Weather information as JSON string
-    """
-    return json.dumps({"location": "70 degrees"})
-
-
-@tool
-def set_theme_color(theme_color: str):
-    """Change the theme color of the UI.
-
-    This is a frontend tool - it returns None as the actual
-    execution happens on the frontend via useFrontendTool.
-
-    Args:
-        theme_color: The color to set as theme
-    """
-    return None
+    description: str = Field(
+        ...,
+        description="A brief description of the step in imperative form",
+    )
+    status: Literal["enabled", "disabled"] = Field(
+        default="enabled",
+        description="The status of the step",
+    )
+    image_url: str | None = Field(
+        default=None,
+        description="Optional image URL to display with the step",
+    )
 
 
 @tool
-def update_proverbs(proverbs_list: ProverbsList):
-    """Update the complete list of proverbs.
+def generate_task_steps(
+    steps: List[Step],
+) -> str:
+    """ユーザーがレビューして承認するためのステップリストを生成します。
 
-    IMPORTANT: Always provide the entire list, not just new proverbs.
+    このツールは、ユーザーがレビューするためのタスク計画を作成します。
+    ユーザーは実行を確認する前にステップを有効/無効にすることができます。
+    ユーザーは計画を承認または却下できます。その結果はJSONオブジェクトとして返されます。
+    - 却下された場合: `{ accepted: false }`
+    - 承認された場合: `{ accepted: true, steps: [{承認されたステップ}] }`
 
-    Args:
-        proverbs_list: The complete updated proverbs list
-
-    Returns:
-        Success message
-    """
-    return "Proverbs updated successfully"
-
-
-def build_proverbs_prompt(input_data, user_message: str) -> str:
-    """Inject the current proverbs state into the prompt."""
-    state_dict = getattr(input_data, "state", None)
-    if isinstance(state_dict, dict) and "proverbs" in state_dict:
-        proverbs_json = json.dumps(state_dict["proverbs"], indent=2)
-        return (
-            f"Current proverbs list:\n{proverbs_json}\n\nUser request: {user_message}"
-        )
-    return user_message
-
-
-async def proverbs_state_from_args(context):
-    """Extract proverbs state from tool arguments.
-
-    This function is called when update_proverbs tool is executed
-    to emit a state snapshot to the UI.
+    承認されたステップのリストが返されますが、元のリスト全体ではない場合があります。
 
     Args:
-        context: ToolResultContext containing tool execution details
+        steps: 10個のステップオブジェクトのリスト。各オブジェクトには説明とステータスが含まれます。
+               各ステップは簡潔（数語）で、命令形である必要があります
+               （例：「穴を掘る」「ドアを開ける」「材料を混ぜる」）。
 
     Returns:
-        dict: State snapshot with proverbs array, or None on error
+        確認メッセージ。
     """
-    try:
-        tool_input = context.tool_input
-        if isinstance(tool_input, str):
-            tool_input = json.loads(tool_input)
+    return f"{len(steps)}個のステップをユーザーレビュー用に生成しました"
 
-        proverbs_data = tool_input.get("proverbs_list", tool_input)
-
-        # Extract proverbs array
-        if isinstance(proverbs_data, dict):
-            proverbs_array = proverbs_data.get("proverbs", [])
-        else:
-            proverbs_array = []
-
-        return {"proverbs": proverbs_array}
-    except Exception:
-        return None
-
-
-# Configure agent behavior
-shared_state_config = StrandsAgentConfig(
-    state_context_builder=build_proverbs_prompt,
-    tool_behaviors={
-        "update_proverbs": ToolBehavior(
-            skip_messages_snapshot=True,
-            state_from_args=proverbs_state_from_args,
-        )
-    },
-)
 
 model = BedrockModel(
     model_id="jp.anthropic.claude-haiku-4-5-20251001-v1:0",
     region_name="ap-northeast-1",
 )
 
-system_prompt = (
-    "You are a helpful and wise assistant that helps manage a collection of proverbs."
-)
-
-# Create Strands agent with tools
-# Note: Frontend tools (set_theme_color, hitl_test) return None - actual execution happens in the UI
 strands_agent = Agent(
     model=model,
-    system_prompt=system_prompt,
-    tools=[update_proverbs, get_weather, set_theme_color],
+    tools=[generate_task_steps],
+    system_prompt="""あなたは明確で実行可能なステップバイステップの計画を作成するタスク計画アシスタントです。
+必ず日本語で回答してください。
+
+**あなたの主な役割:**
+- ユーザーのリクエストを正確に10個の明確で実行可能なステップに分解する
+- ユーザーのレビューと承認が必要なステップを生成する
+- ユーザーが承認したステップのみを実行する
+
+**ユーザーがタスクのヘルプをリクエストした場合:**
+1. 必ず`generate_task_steps`ツールを使用して分解を作成する（特に指定がない限り10ステップ）
+2. 各ステップは:
+   - 簡潔（数語のみ）
+   - 命令形（例：「穴を掘る」「ドアを開ける」「材料を混ぜる」）
+   - 明確で実行可能
+   - 最初から最後まで論理的に順序付けられている
+3. 初期状態ではすべてのステップを「enabled」に設定
+4. ユーザーが計画をレビューした後:
+   - 承認された場合: 計画を簡潔に確認し（承認されたステップのみ含む）、進める（ステップを繰り返さない）。追加の確認情報を求めない。
+   - 拒否された場合: 変更したい点を尋ねる（ユーザーの入力があるまでgenerate_task_stepsを再度呼び出さない）
+5. ユーザーが計画を承認したら、承認されたステップを順番に実行したかのように繰り返して「実行」する。その後、計画が完了したことをユーザーに知らせる。
+    - 例：ユーザーが「穴を掘る」「ドアを開ける」「材料を混ぜる」のステップを承認した場合、「穴を掘っています... ドアを開けています... 材料を混ぜています...」と回答する
+
+**重要:**
+- ユーザーの入力なしに`generate_task_steps`を連続して2回呼び出さない
+- ツールを呼び出した後、回答でステップのリストを繰り返さない
+- 承認されたステップをどのように実行するかの簡潔で創造的な要約を提供する
+
+**画像について:**
+- 各ステップにはオプションで画像URLを含めることができる
+- テスト用に以下のダミー画像URLを使用: https://picsum.photos/200/100?random=N（Nはステップ番号）
+- 例: image_url="https://picsum.photos/200/100?random=1"
+""",
 )
 
-# Wrap with AG-UI integration
 agui_agent = StrandsAgent(
     agent=strands_agent,
-    name="proverbs_agent",
-    description="A proverbs assistant that collaborates with you to manage proverbs",
-    config=shared_state_config,
+    name="human_in_the_loop",
+    description="AWS Strands agent with human-in-the-loop task planning",
 )
 
-# Create the FastAPI app
 app = create_strands_app(agui_agent, "/invocations")
 
 

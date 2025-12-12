@@ -1,155 +1,494 @@
-'use client';
+"use client";
+import React, { useState, useEffect } from "react";
+import "@copilotkit/react-ui/styles.css";
+import { useHumanInTheLoop, useLangGraphInterrupt } from "@copilotkit/react-core";
+import { CopilotChat } from "@copilotkit/react-ui";
+import { useTheme } from "next-themes";
 
-import {
-  useCoAgent,
-  useDefaultTool,
-  useFrontendTool,
-  useRenderToolCall,
-} from '@copilotkit/react-core';
-import {
-  type CopilotKitCSSProperties,
-  CopilotSidebar,
-} from '@copilotkit/react-ui';
-import { useState } from 'react';
-import { DefaultToolComponent } from '@/components/default-tool-ui';
-import { WeatherCard } from '@/components/weather';
 
-export default function CopilotKitPage() {
-  const [themeColor, setThemeColor] = useState('#6366f1');
-
-  // 🪁 Frontend Actions: https://docs.copilotkit.ai/guides/frontend-actions
-  useFrontendTool({
-    name: 'set_theme_color',
-    parameters: [
-      {
-        name: 'theme_color',
-        description: 'The theme color to set. Make sure to pick nice colors.',
-        required: true,
-      },
-    ],
-    handler({ theme_color }) {
-      setThemeColor(theme_color);
-    },
-  });
-
-  return (
-    <main
-      style={
-        { '--copilot-kit-primary-color': themeColor } as CopilotKitCSSProperties
-      }
-    >
-      <CopilotSidebar
-        clickOutsideToClose={false}
-        defaultOpen={true}
-        // Adds an initial message to the chat
-        labels={{
-          title: 'Popup Assistant',
-          initial: "👋 Hi, there! You're chatting with an Strands agent.",
-        }}
-        // Suggestions for guiding users
-        suggestions={[
-          {
-            title: 'Generative UI',
-            message: "What's the weather in San Francisco?",
-          },
-          {
-            title: 'Frontend Tools',
-            message: 'Set the theme to green.',
-          },
-          {
-            title: 'Writing Agent State',
-            message: 'Add a proverb about AI.',
-          },
-        ]}
-      >
-        {/* Wrapping your content in the sidebar pushes it to the side*/}
-        <YourMainContent themeColor={themeColor} />
-      </CopilotSidebar>
-    </main>
-  );
+interface Step {
+  description: string;
+  status: "disabled" | "enabled" | "executing";
+  image_url?: string;
 }
 
-function YourMainContent({ themeColor }: { themeColor: string }) {
-  // 🪁 Use CoAgent to get shared state from backend
-  const { state, setState } = useCoAgent({
-    name: 'strands_agent',
-    initialState: {
-      proverbs: [
-        'CopilotKit may be new, but its the best thing since sliced bread.',
-      ],
-    },
-  });
-
-  //🪁 Generative UI: https://docs.copilotkit.ai/strands/generative-ui/backend-tools
-  useRenderToolCall(
-    {
-      name: 'get_weather',
-      parameters: [
-        {
-          name: 'location',
-          description: 'The location to get the weather for.',
-          required: true,
-        },
-      ],
-      render: (props) => (
-        <WeatherCard themeColor={themeColor} location={props.args.location} />
-      ),
-    },
-    [themeColor]
-  );
-
-  //🪁 Default Generative UI: https://docs.copilotkit.ai/strands/generative-ui/backend-tools
-  useDefaultTool(
-    {
-      render: (props) => (
-        <DefaultToolComponent themeColor={themeColor} {...props} />
-      ),
-    },
-    [themeColor]
-  );
-
-  return (
+// Shared UI Components
+const StepContainer = ({ theme, children }: { theme?: string; children: React.ReactNode }) => (
+  <div data-testid="select-steps" className="flex">
     <div
-      style={{ backgroundColor: themeColor }}
-      className="h-screen flex justify-center items-center flex-col transition-colors duration-300"
+      className={`relative rounded-xl w-[800px] p-6 shadow-lg backdrop-blur-sm ${
+        theme === "dark"
+          ? "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border border-slate-700/50 shadow-2xl"
+          : "bg-gradient-to-br from-white via-gray-50 to-white text-gray-800 border border-gray-200/80"
+      }`}
     >
-      <div className="bg-white/20 backdrop-blur-md p-8 rounded-2xl shadow-xl max-w-2xl w-full">
-        <h1 className="text-4xl font-bold text-white mb-2 text-center">
-          Proverbs
-        </h1>
-        <p className="text-gray-200 text-center italic mb-6">
-          This is a demonstrative page, but it could be anything you want! 🪁
-        </p>
-        <hr className="border-white/20 my-6" />
-        <div className="flex flex-col gap-3">
-          {state.proverbs?.map((proverb, index) => (
-            <div
-              key={index}
-              className="bg-white/15 p-4 rounded-xl text-white relative group hover:bg-white/20 transition-all"
-            >
-              <p className="pr-8">{proverb}</p>
-              <button
-                type="button"
-                onClick={() =>
-                  setState({
-                    ...state,
-                    proverbs: state.proverbs?.filter((_, i) => i !== index),
-                  })
-                }
-                className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity
-                  bg-red-500 hover:bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+      {children}
+    </div>
+  </div>
+);
+
+const StepHeader = ({
+  theme,
+  enabledCount,
+  totalCount,
+  status,
+  showStatus = false,
+}: {
+  theme?: string;
+  enabledCount: number;
+  totalCount: number;
+  status?: string;
+  showStatus?: boolean;
+}) => (
+  <div className="mb-5">
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        Select Steps
+      </h2>
+      <div className="flex items-center gap-3">
+        <div className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
+          {enabledCount}/{totalCount} Selected
         </div>
-        {state.proverbs?.length === 0 && (
-          <p className="text-center text-white/80 italic my-8">
-            No proverbs yet. Ask the assistant to add some!
-          </p>
+        {showStatus && (
+          <div
+            className={`text-xs px-2 py-1 rounded-full font-medium ${
+              status === "executing"
+                ? theme === "dark"
+                  ? "bg-blue-900/30 text-blue-300 border border-blue-500/30"
+                  : "bg-blue-50 text-blue-600 border border-blue-200"
+                : theme === "dark"
+                  ? "bg-slate-700 text-slate-300"
+                  : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {status === "executing" ? "Ready" : "Waiting"}
+          </div>
         )}
       </div>
     </div>
+
+    <div
+      className={`relative h-2 rounded-full overflow-hidden ${theme === "dark" ? "bg-slate-700" : "bg-gray-200"}`}
+    >
+      <div
+        className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
+        style={{ width: `${totalCount > 0 ? (enabledCount / totalCount) * 100 : 0}%` }}
+      />
+    </div>
+  </div>
+);
+
+const StepItem = ({
+  step,
+  theme,
+  status,
+  onToggle,
+  disabled = false,
+}: {
+  step: { description: string; status: string; image_url?: string };
+  theme?: string;
+  status?: string;
+  onToggle: () => void;
+  disabled?: boolean;
+}) => (
+  <div
+    className={`flex flex-col rounded-xl overflow-hidden transition-all duration-300 cursor-pointer hover:scale-[1.02] ${
+      step.status === "enabled"
+        ? theme === "dark"
+          ? "bg-gradient-to-b from-blue-900/30 to-purple-900/20 border-2 border-blue-500/50 shadow-lg shadow-blue-500/20"
+          : "bg-gradient-to-b from-blue-50 to-purple-50 border-2 border-blue-400 shadow-lg shadow-blue-200/50"
+        : theme === "dark"
+          ? "bg-slate-800/50 border border-slate-600/30"
+          : "bg-gray-50 border border-gray-200"
+    } ${disabled ? "opacity-60 cursor-not-allowed hover:scale-100" : ""}`}
+    onClick={() => !disabled && onToggle()}
+  >
+    {/* 画像エリア */}
+    <div className="relative aspect-video w-full overflow-hidden">
+      <img
+        src={step.image_url || `https://picsum.photos/seed/${encodeURIComponent(step.description)}/400/225`}
+        alt={step.description}
+        className={`w-full h-full object-cover transition-all duration-300 ${
+          step.status !== "enabled" ? "grayscale opacity-50" : ""
+        }`}
+      />
+      {/* 選択状態のオーバーレイ */}
+      {step.status === "enabled" && (
+        <div className="absolute top-2 right-2">
+          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* 説明文エリア */}
+    <label data-testid="step-item" className="flex items-center p-3 cursor-pointer">
+      <div className="relative">
+        <input
+          type="checkbox"
+          checked={step.status === "enabled"}
+          onChange={onToggle}
+          className="sr-only"
+          disabled={disabled}
+        />
+        <div
+          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200 ${
+            step.status === "enabled"
+              ? "bg-gradient-to-br from-blue-500 to-purple-600 border-blue-500"
+              : theme === "dark"
+                ? "border-slate-400 bg-slate-700"
+                : "border-gray-300 bg-white"
+          }`}
+        >
+          {step.status === "enabled" && (
+            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </div>
+      </div>
+      <span
+        data-testid="step-text"
+        className={`ml-3 text-sm font-medium transition-all duration-300 line-clamp-2 ${
+          step.status !== "enabled" && status !== "inProgress"
+            ? `line-through ${theme === "dark" ? "text-slate-500" : "text-gray-400"}`
+            : theme === "dark"
+              ? "text-white"
+              : "text-gray-800"
+        }`}
+      >
+        {step.description}
+      </span>
+    </label>
+  </div>
+);
+
+const ActionButton = ({
+  variant,
+  theme,
+  disabled,
+  onClick,
+  children,
+}: {
+  variant: "primary" | "secondary" | "success" | "danger";
+  theme?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) => {
+  const baseClasses = "px-6 py-3 rounded-lg font-semibold transition-all duration-200";
+  const enabledClasses = "hover:scale-105 shadow-md hover:shadow-lg";
+  const disabledClasses = "opacity-50 cursor-not-allowed";
+
+  const variantClasses = {
+    primary:
+      "bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg hover:shadow-xl",
+    secondary:
+      theme === "dark"
+        ? "bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 hover:border-slate-500"
+        : "bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 hover:border-gray-400",
+    success:
+      "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl",
+    danger:
+      "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl",
+  };
+
+  return (
+    <button
+      className={`${baseClasses} ${disabled ? disabledClasses : enabledClasses} ${
+        disabled && variant === "secondary"
+          ? "bg-gray-200 text-gray-500"
+          : disabled && variant === "success"
+            ? "bg-gray-400"
+            : variantClasses[variant]
+      }`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
+};
+
+const DecorativeElements = ({
+  theme,
+  variant = "default",
+}: {
+  theme?: string;
+  variant?: "default" | "success" | "danger";
+}) => (
+  <>
+    <div
+      className={`absolute top-3 right-3 w-16 h-16 rounded-full blur-xl ${
+        variant === "success"
+          ? theme === "dark"
+            ? "bg-gradient-to-br from-green-500/10 to-emerald-500/10"
+            : "bg-gradient-to-br from-green-200/30 to-emerald-200/30"
+          : variant === "danger"
+            ? theme === "dark"
+              ? "bg-gradient-to-br from-red-500/10 to-pink-500/10"
+              : "bg-gradient-to-br from-red-200/30 to-pink-200/30"
+            : theme === "dark"
+              ? "bg-gradient-to-br from-blue-500/10 to-purple-500/10"
+              : "bg-gradient-to-br from-blue-200/30 to-purple-200/30"
+      }`}
+    />
+    <div
+      className={`absolute bottom-3 left-3 w-12 h-12 rounded-full blur-xl ${
+        variant === "default"
+          ? theme === "dark"
+            ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10"
+            : "bg-gradient-to-br from-purple-200/30 to-pink-200/30"
+          : "opacity-50"
+      }`}
+    />
+  </>
+);
+const InterruptHumanInTheLoop: React.FC<{
+  event: { value: { steps: Step[] } };
+  resolve: (value: string) => void;
+}> = ({ event, resolve }) => {
+  const { theme } = useTheme();
+
+  // Parse and initialize steps data
+  let initialSteps: Step[] = [];
+  if (event.value && event.value.steps && Array.isArray(event.value.steps)) {
+    initialSteps = event.value.steps.map((step: any) => ({
+      description: typeof step === "string" ? step : step.description || "",
+      status: typeof step === "object" && step.status ? step.status : "enabled",
+    }));
+  }
+
+  const [localSteps, setLocalSteps] = useState<Step[]>(initialSteps);
+  const enabledCount = localSteps.filter((step) => step.status === "enabled").length;
+
+  const handleStepToggle = (index: number) => {
+    setLocalSteps((prevSteps) =>
+      prevSteps.map((step, i) =>
+        i === index
+          ? { ...step, status: step.status === "enabled" ? "disabled" : "enabled" }
+          : step,
+      ),
+    );
+  };
+
+  const handlePerformSteps = () => {
+    const selectedSteps = localSteps
+      .filter((step) => step.status === "enabled")
+      .map((step) => step.description);
+    resolve("The user selected the following steps: " + selectedSteps.join(", "));
+  };
+
+  return (
+    <StepContainer theme={theme}>
+      <StepHeader theme={theme} enabledCount={enabledCount} totalCount={localSteps.length} />
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {localSteps.map((step, index) => (
+          <StepItem
+            key={index}
+            step={step}
+            theme={theme}
+            onToggle={() => handleStepToggle(index)}
+          />
+        ))}
+      </div>
+
+      <div className="flex justify-center">
+        <ActionButton variant="primary" theme={theme} onClick={handlePerformSteps}>
+          <span className="text-lg">✨</span>
+          Perform Steps
+          <span
+            className={`ml-1 px-2 py-1 rounded-full text-xs font-bold ${
+              theme === "dark" ? "bg-purple-800/50" : "bg-purple-600/20"
+            }`}
+          >
+            {enabledCount}
+          </span>
+        </ActionButton>
+      </div>
+
+      <DecorativeElements theme={theme} />
+    </StepContainer>
+  );
+};
+
+const Chat = () => {
+  useLangGraphInterrupt({
+    render: ({ event, resolve }) => <InterruptHumanInTheLoop event={event} resolve={resolve} />,
+  });
+  useHumanInTheLoop({
+    name: "generate_task_steps",
+    description: "Generates a list of steps for the user to perform",
+    parameters: [
+      {
+        name: "steps",
+        type: "object[]",
+        attributes: [
+          {
+            name: "description",
+            type: "string",
+          },
+          {
+            name: "status",
+            type: "string",
+            enum: ["enabled", "disabled", "executing"],
+          },
+        ],
+      },
+    ],
+    available: "enabled",
+    render: ({ args, respond, status }) => {
+      return <StepsFeedback args={args} respond={respond} status={status} />;
+    },
+  });
+
+  return (
+    <div className="flex justify-center items-center h-full w-full">
+      <div className="h-full w-full md:w-8/10 md:h-8/10 rounded-lg">
+        <CopilotChat
+          suggestions={[
+            { title: "Simple plan", message: "Please plan a trip to mars in 5 steps." },
+            { title: "Complex plan", message: "Please plan a pastra dish in 10 steps." },
+          ]}
+          className="h-full rounded-2xl max-w-6xl mx-auto"
+          labels={{
+            initial:
+              "Hi, I'm an agent specialized in helping you with your tasks. How can I help you?",
+          }}
+        />
+      </div>
+    </div>
+  );
+};
+
+const StepsFeedback = ({ args, respond, status }: { args: any; respond: any; status: any }) => {
+  const { theme } = useTheme();
+  const [localSteps, setLocalSteps] = useState<Step[]>([]);
+  const [accepted, setAccepted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (status === "executing" && localSteps.length === 0) {
+      setLocalSteps(args.steps);
+    }
+  }, [status, args.steps, localSteps]);
+
+  if (args.steps === undefined || args.steps.length === 0) {
+    return <></>;
+  }
+
+  const steps = localSteps.length > 0 ? localSteps : args.steps;
+  const enabledCount = steps.filter((step: any) => step.status === "enabled").length;
+
+  const handleStepToggle = (index: number) => {
+    setLocalSteps((prevSteps) =>
+      prevSteps.map((step, i) =>
+        i === index
+          ? { ...step, status: step.status === "enabled" ? "disabled" : "enabled" }
+          : step,
+      ),
+    );
+  };
+
+  const handleReject = () => {
+    if (respond) {
+      setAccepted(false);
+      respond({ accepted: false });
+    }
+  };
+
+  const handleConfirm = () => {
+    if (respond) {
+      setAccepted(true);
+      respond({ accepted: true, steps: localSteps.filter((step) => step.status === "enabled") });
+    }
+  };
+
+  return (
+    <StepContainer theme={theme}>
+      <StepHeader
+        theme={theme}
+        enabledCount={enabledCount}
+        totalCount={steps.length}
+        status={status}
+        showStatus={true}
+      />
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {steps.map((step: any, index: any) => (
+          <StepItem
+            key={index}
+            step={step}
+            theme={theme}
+            status={status}
+            onToggle={() => handleStepToggle(index)}
+            disabled={status !== "executing"}
+          />
+        ))}
+      </div>
+
+      {/* Action Buttons - Different logic from InterruptHumanInTheLoop */}
+      {accepted === null && (
+        <div className="flex justify-center gap-4">
+          <ActionButton
+            variant="secondary"
+            theme={theme}
+            disabled={status !== "executing"}
+            onClick={handleReject}
+          >
+            <span className="mr-2">✗</span>
+            Reject
+          </ActionButton>
+          <ActionButton
+            variant="success"
+            theme={theme}
+            disabled={status !== "executing"}
+            onClick={handleConfirm}
+          >
+            <span className="mr-2">✓</span>
+            Confirm
+            <span
+              className={`ml-2 px-2 py-1 rounded-full text-xs font-bold ${
+                theme === "dark" ? "bg-green-800/50" : "bg-green-600/20"
+              }`}
+            >
+              {enabledCount}
+            </span>
+          </ActionButton>
+        </div>
+      )}
+
+      {/* Result State - Unique to StepsFeedback */}
+      {accepted !== null && (
+        <div className="flex justify-center">
+          <div
+            className={`px-6 py-3 rounded-lg font-semibold flex items-center gap-2 ${
+              accepted
+                ? theme === "dark"
+                  ? "bg-green-900/30 text-green-300 border border-green-500/30"
+                  : "bg-green-50 text-green-700 border border-green-200"
+                : theme === "dark"
+                  ? "bg-red-900/30 text-red-300 border border-red-500/30"
+                  : "bg-red-50 text-red-700 border border-red-200"
+            }`}
+          >
+            <span className="text-lg">{accepted ? "✓" : "✗"}</span>
+            {accepted ? "Accepted" : "Rejected"}
+          </div>
+        </div>
+      )}
+
+      <DecorativeElements
+        theme={theme}
+        variant={accepted === true ? "success" : accepted === false ? "danger" : "default"}
+      />
+    </StepContainer>
+  );
+};
+
+export default function Page() {
+  return <Chat />;
 }
