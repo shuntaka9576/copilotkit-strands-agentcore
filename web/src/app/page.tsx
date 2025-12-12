@@ -231,23 +231,10 @@ const Chat = () => {
         name: "frames",
         type: "object[]",
         attributes: [
-          {
-            name: "description",
-            type: "string",
-          },
-          {
-            name: "status",
-            type: "string",
-            enum: ["enabled", "disabled", "executing"],
-          },
-          {
-            name: "timestamp",
-            type: "string",
-          },
-          {
-            name: "image_url",
-            type: "string",
-          },
+          { name: "description", type: "string" },
+          { name: "status", type: "string", enum: ["enabled", "disabled", "executing"] },
+          { name: "timestamp", type: "string" },
+          { name: "image_url", type: "string" },
         ],
       },
     ],
@@ -309,11 +296,12 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
   const handleReject = () => {
     if (respond) {
       setAccepted(false);
+      setStep("done");
       respond({ accepted: false });
     }
   };
 
-  // フレーム選択完了 → タグ選択へ
+  // フレーム選択完了 → APIからタグ候補を取得 → タグ選択へ
   const handleFrameConfirm = async () => {
     const selectedFrames = localFrames.filter((frame) => frame.status === "enabled");
 
@@ -328,19 +316,25 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
       console.error("ログ送信エラー:", error);
     }
 
-    // モックのタグ候補を生成（TODO: 実際はLLMで生成）
-    const mockTags: Tag[] = [
-      { name: "点検作業", selected: true },
-      { name: "設備確認", selected: true },
-      { name: "安全装備", selected: true },
-      { name: "製造ライン", selected: true },
-      { name: "品質管理", selected: true },
-      { name: "作業記録", selected: true },
-      { name: "定期点検", selected: true },
-      { name: "異常確認", selected: true },
-    ];
-    setLocalTags(mockTags);
-    setStep("tags");
+    // APIからタグ候補を取得
+    try {
+      const response = await fetch("http://localhost:8080/suggest_tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frames: selectedFrames }),
+      });
+      const data = await response.json();
+      setLocalTags(data.tags);
+      setStep("tags");
+    } catch (error) {
+      console.error("タグ取得エラー:", error);
+      // エラー時はフレーム選択結果のみで完了
+      if (respond) {
+        setAccepted(true);
+        setStep("done");
+        respond({ accepted: true, frames: selectedFrames });
+      }
+    }
   };
 
   const handleTagToggle = (index: number) => {
@@ -465,16 +459,14 @@ const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; st
         ))}
       </div>
 
-      {accepted === null && (
-        <div className="flex justify-end gap-3">
-          <ActionButton variant="secondary" theme={theme} onClick={handleReject} disabled={!respond}>
-            キャンセル
-          </ActionButton>
-          <ActionButton variant="primary" theme={theme} onClick={handleFrameConfirm} disabled={!respond}>
-            {respond ? "解析実行" : "準備中..."}
-          </ActionButton>
-        </div>
-      )}
+      <div className="flex justify-end gap-3">
+        <ActionButton variant="secondary" theme={theme} onClick={handleReject} disabled={!respond}>
+          キャンセル
+        </ActionButton>
+        <ActionButton variant="primary" theme={theme} onClick={handleFrameConfirm} disabled={!respond}>
+          {respond ? "解析実行" : "準備中..."}
+        </ActionButton>
+      </div>
     </FrameContainer>
   );
 };
@@ -697,26 +689,6 @@ const ChatPanel = () => {
   useLangGraphInterrupt({
     render: ({ event, resolve }) => {
       return <InterruptHumanInTheLoop event={event} resolve={resolve} />;
-    },
-  });
-
-  useHumanInTheLoop({
-    name: "select_tags",
-    description: "タグ候補を表示し、ユーザーに選択させます",
-    parameters: [
-      {
-        name: "tags",
-        type: "object[]",
-        attributes: [
-          { name: "name", type: "string" },
-          { name: "selected", type: "boolean" },
-        ],
-      },
-    ],
-    available: "enabled",
-    render: ({ args, respond, status }) => {
-      console.log("useHumanInTheLoop select_tags render called", { args, status });
-      return <TagsFeedback args={args} respond={respond} status={status} />;
     },
   });
 
