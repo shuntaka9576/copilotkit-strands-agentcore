@@ -6,20 +6,21 @@ import { CopilotChat } from "@copilotkit/react-ui";
 import { useTheme } from "next-themes";
 
 
-interface Step {
+interface Frame {
   description: string;
   status: "disabled" | "enabled" | "executing";
+  timestamp: string;
   image_url?: string;
 }
 
 // Shared UI Components
-const StepContainer = ({ theme, children }: { theme?: string; children: React.ReactNode }) => (
-  <div data-testid="select-steps" className="flex">
+const FrameContainer = ({ theme, children }: { theme?: string; children: React.ReactNode }) => (
+  <div data-testid="select-frames" className="flex">
     <div
-      className={`relative rounded-xl w-[800px] p-6 shadow-lg backdrop-blur-sm ${
+      className={`rounded-lg w-[800px] p-5 ${
         theme === "dark"
-          ? "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white border border-slate-700/50 shadow-2xl"
-          : "bg-gradient-to-br from-white via-gray-50 to-white text-gray-800 border border-gray-200/80"
+          ? "bg-slate-800 text-white border border-slate-600"
+          : "bg-white text-gray-800 border border-gray-300"
       }`}
     >
       {children}
@@ -27,292 +28,161 @@ const StepContainer = ({ theme, children }: { theme?: string; children: React.Re
   </div>
 );
 
-const StepHeader = ({
+const FrameHeader = ({
   theme,
   enabledCount,
   totalCount,
-  status,
-  showStatus = false,
 }: {
   theme?: string;
   enabledCount: number;
   totalCount: number;
-  status?: string;
-  showStatus?: boolean;
 }) => (
-  <div className="mb-5">
-    <div className="flex items-center justify-between mb-3">
-      <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-        Select Steps
-      </h2>
-      <div className="flex items-center gap-3">
-        <div className={`text-sm ${theme === "dark" ? "text-slate-400" : "text-gray-500"}`}>
-          {enabledCount}/{totalCount} Selected
-        </div>
-        {showStatus && (
-          <div
-            className={`text-xs px-2 py-1 rounded-full font-medium ${
-              status === "executing"
-                ? theme === "dark"
-                  ? "bg-blue-900/30 text-blue-300 border border-blue-500/30"
-                  : "bg-blue-50 text-blue-600 border border-blue-200"
-                : theme === "dark"
-                  ? "bg-slate-700 text-slate-300"
-                  : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            {status === "executing" ? "Ready" : "Waiting"}
-          </div>
-        )}
-      </div>
-    </div>
-
-    <div
-      className={`relative h-2 rounded-full overflow-hidden ${theme === "dark" ? "bg-slate-700" : "bg-gray-200"}`}
-    >
-      <div
-        className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-500 ease-out"
-        style={{ width: `${totalCount > 0 ? (enabledCount / totalCount) * 100 : 0}%` }}
-      />
+  <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-300 dark:border-slate-600">
+    <h2 className={`text-lg font-semibold ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+      除外するフレームを選択
+    </h2>
+    <div className={`text-sm font-medium ${theme === "dark" ? "text-slate-300" : "text-gray-600"}`}>
+      解析対象: {enabledCount} / {totalCount}
     </div>
   </div>
 );
 
-const StepItem = ({
-  step,
+const FrameItem = ({
+  frame,
   theme,
-  status,
   onToggle,
-  disabled = false,
 }: {
-  step: { description: string; status: string; image_url?: string };
+  frame: { description: string; status: string; timestamp: string; image_url?: string };
   theme?: string;
-  status?: string;
   onToggle: () => void;
-  disabled?: boolean;
 }) => (
   <div
-    className={`flex flex-col rounded-xl overflow-hidden transition-all duration-300 cursor-pointer hover:scale-[1.02] ${
-      step.status === "enabled"
-        ? theme === "dark"
-          ? "bg-gradient-to-b from-blue-900/30 to-purple-900/20 border-2 border-blue-500/50 shadow-lg shadow-blue-500/20"
-          : "bg-gradient-to-b from-blue-50 to-purple-50 border-2 border-blue-400 shadow-lg shadow-blue-200/50"
+    data-testid="frame-item"
+    className={`relative rounded overflow-hidden cursor-pointer border-2 transition-colors ${
+      frame.status === "enabled"
+        ? "border-blue-500"
         : theme === "dark"
-          ? "bg-slate-800/50 border border-slate-600/30"
-          : "bg-gray-50 border border-gray-200"
-    } ${disabled ? "opacity-60 cursor-not-allowed hover:scale-100" : ""}`}
-    onClick={() => !disabled && onToggle()}
+          ? "border-slate-600 opacity-50"
+          : "border-gray-300 opacity-50"
+    }`}
+    onClick={onToggle}
   >
-    {/* 画像エリア */}
-    <div className="relative aspect-video w-full overflow-hidden">
+    <div className="aspect-video w-full overflow-hidden">
       <img
-        src={step.image_url || `https://picsum.photos/seed/${encodeURIComponent(step.description)}/400/225`}
-        alt={step.description}
-        className={`w-full h-full object-cover transition-all duration-300 ${
-          step.status !== "enabled" ? "grayscale opacity-50" : ""
-        }`}
+        src={frame.image_url || `https://picsum.photos/seed/${encodeURIComponent(frame.timestamp)}/400/225`}
+        alt={frame.timestamp}
+        className="w-full h-full object-cover"
       />
-      {/* 選択状態のオーバーレイ */}
-      {step.status === "enabled" && (
-        <div className="absolute top-2 right-2">
-          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        </div>
-      )}
     </div>
-
-    {/* 説明文エリア */}
-    <label data-testid="step-item" className="flex items-center p-3 cursor-pointer">
-      <div className="relative">
-        <input
-          type="checkbox"
-          checked={step.status === "enabled"}
-          onChange={onToggle}
-          className="sr-only"
-          disabled={disabled}
-        />
-        <div
-          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-200 ${
-            step.status === "enabled"
-              ? "bg-gradient-to-br from-blue-500 to-purple-600 border-blue-500"
-              : theme === "dark"
-                ? "border-slate-400 bg-slate-700"
-                : "border-gray-300 bg-white"
-          }`}
-        >
-          {step.status === "enabled" && (
-            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-            </svg>
-          )}
+    {/* タイムスタンプ */}
+    <div className={`px-2 py-1 text-xs font-mono text-center ${
+      theme === "dark" ? "bg-slate-700 text-slate-200" : "bg-gray-100 text-gray-700"
+    }`}>
+      {frame.timestamp}
+    </div>
+    {/* 除外マーク */}
+    {frame.status !== "enabled" && (
+      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+        <div className={`px-2 py-1 rounded text-xs font-medium ${
+          theme === "dark" ? "bg-slate-800 text-slate-300" : "bg-white text-gray-600"
+        }`}>
+          除外
         </div>
       </div>
-      <span
-        data-testid="step-text"
-        className={`ml-3 text-sm font-medium transition-all duration-300 line-clamp-2 ${
-          step.status !== "enabled" && status !== "inProgress"
-            ? `line-through ${theme === "dark" ? "text-slate-500" : "text-gray-400"}`
-            : theme === "dark"
-              ? "text-white"
-              : "text-gray-800"
-        }`}
-      >
-        {step.description}
-      </span>
-    </label>
+    )}
   </div>
 );
 
 const ActionButton = ({
   variant,
   theme,
-  disabled,
   onClick,
   children,
 }: {
-  variant: "primary" | "secondary" | "success" | "danger";
+  variant: "primary" | "secondary";
   theme?: string;
-  disabled?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) => {
-  const baseClasses = "px-6 py-3 rounded-lg font-semibold transition-all duration-200";
-  const enabledClasses = "hover:scale-105 shadow-md hover:shadow-lg";
-  const disabledClasses = "opacity-50 cursor-not-allowed";
+  const baseClasses = "px-5 py-2 rounded font-medium text-sm transition-colors";
 
   const variantClasses = {
     primary:
-      "bg-gradient-to-r from-purple-500 to-purple-700 hover:from-purple-600 hover:to-purple-800 text-white shadow-lg hover:shadow-xl",
+      theme === "dark"
+        ? "bg-blue-600 hover:bg-blue-700 text-white"
+        : "bg-blue-600 hover:bg-blue-700 text-white",
     secondary:
       theme === "dark"
-        ? "bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 hover:border-slate-500"
-        : "bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-300 hover:border-gray-400",
-    success:
-      "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl",
-    danger:
-      "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl",
+        ? "bg-slate-600 hover:bg-slate-500 text-white"
+        : "bg-gray-200 hover:bg-gray-300 text-gray-700",
   };
 
   return (
     <button
-      className={`${baseClasses} ${disabled ? disabledClasses : enabledClasses} ${
-        disabled && variant === "secondary"
-          ? "bg-gray-200 text-gray-500"
-          : disabled && variant === "success"
-            ? "bg-gray-400"
-            : variantClasses[variant]
-      }`}
-      disabled={disabled}
+      className={`${baseClasses} ${variantClasses[variant]}`}
       onClick={onClick}
     >
       {children}
     </button>
   );
 };
-
-const DecorativeElements = ({
-  theme,
-  variant = "default",
-}: {
-  theme?: string;
-  variant?: "default" | "success" | "danger";
-}) => (
-  <>
-    <div
-      className={`absolute top-3 right-3 w-16 h-16 rounded-full blur-xl ${
-        variant === "success"
-          ? theme === "dark"
-            ? "bg-gradient-to-br from-green-500/10 to-emerald-500/10"
-            : "bg-gradient-to-br from-green-200/30 to-emerald-200/30"
-          : variant === "danger"
-            ? theme === "dark"
-              ? "bg-gradient-to-br from-red-500/10 to-pink-500/10"
-              : "bg-gradient-to-br from-red-200/30 to-pink-200/30"
-            : theme === "dark"
-              ? "bg-gradient-to-br from-blue-500/10 to-purple-500/10"
-              : "bg-gradient-to-br from-blue-200/30 to-purple-200/30"
-      }`}
-    />
-    <div
-      className={`absolute bottom-3 left-3 w-12 h-12 rounded-full blur-xl ${
-        variant === "default"
-          ? theme === "dark"
-            ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10"
-            : "bg-gradient-to-br from-purple-200/30 to-pink-200/30"
-          : "opacity-50"
-      }`}
-    />
-  </>
-);
 const InterruptHumanInTheLoop: React.FC<{
-  event: { value: { steps: Step[] } };
+  event: { value: { frames: Frame[] } };
   resolve: (value: string) => void;
 }> = ({ event, resolve }) => {
   const { theme } = useTheme();
 
-  // Parse and initialize steps data
-  let initialSteps: Step[] = [];
-  if (event.value && event.value.steps && Array.isArray(event.value.steps)) {
-    initialSteps = event.value.steps.map((step: any) => ({
-      description: typeof step === "string" ? step : step.description || "",
-      status: typeof step === "object" && step.status ? step.status : "enabled",
+  // Parse and initialize frames data
+  let initialFrames: Frame[] = [];
+  if (event.value && event.value.frames && Array.isArray(event.value.frames)) {
+    initialFrames = event.value.frames.map((frame: any) => ({
+      description: typeof frame === "string" ? frame : frame.description || "",
+      status: typeof frame === "object" && frame.status ? frame.status : "enabled",
+      timestamp: typeof frame === "object" && frame.timestamp ? frame.timestamp : "00:00:00",
     }));
   }
 
-  const [localSteps, setLocalSteps] = useState<Step[]>(initialSteps);
-  const enabledCount = localSteps.filter((step) => step.status === "enabled").length;
+  const [localFrames, setLocalFrames] = useState<Frame[]>(initialFrames);
+  const enabledCount = localFrames.filter((frame) => frame.status === "enabled").length;
 
-  const handleStepToggle = (index: number) => {
-    setLocalSteps((prevSteps) =>
-      prevSteps.map((step, i) =>
+  const handleFrameToggle = (index: number) => {
+    setLocalFrames((prevFrames) =>
+      prevFrames.map((frame, i) =>
         i === index
-          ? { ...step, status: step.status === "enabled" ? "disabled" : "enabled" }
-          : step,
+          ? { ...frame, status: frame.status === "enabled" ? "disabled" : "enabled" }
+          : frame,
       ),
     );
   };
 
-  const handlePerformSteps = () => {
-    const selectedSteps = localSteps
-      .filter((step) => step.status === "enabled")
-      .map((step) => step.description);
-    resolve("The user selected the following steps: " + selectedSteps.join(", "));
+  const handleAnalyzeFrames = () => {
+    const selectedFrames = localFrames
+      .filter((frame) => frame.status === "enabled")
+      .map((frame) => `${frame.timestamp}: ${frame.description}`);
+    resolve("ユーザーが選択したフレーム: " + selectedFrames.join(", "));
   };
 
   return (
-    <StepContainer theme={theme}>
-      <StepHeader theme={theme} enabledCount={enabledCount} totalCount={localSteps.length} />
+    <FrameContainer theme={theme}>
+      <FrameHeader theme={theme} enabledCount={enabledCount} totalCount={localFrames.length} />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {localSteps.map((step, index) => (
-          <StepItem
+        {localFrames.map((frame, index) => (
+          <FrameItem
             key={index}
-            step={step}
+            frame={frame}
             theme={theme}
-            onToggle={() => handleStepToggle(index)}
+            onToggle={() => handleFrameToggle(index)}
           />
         ))}
       </div>
 
-      <div className="flex justify-center">
-        <ActionButton variant="primary" theme={theme} onClick={handlePerformSteps}>
-          <span className="text-lg">✨</span>
-          Perform Steps
-          <span
-            className={`ml-1 px-2 py-1 rounded-full text-xs font-bold ${
-              theme === "dark" ? "bg-purple-800/50" : "bg-purple-600/20"
-            }`}
-          >
-            {enabledCount}
-          </span>
+      <div className="flex justify-end">
+        <ActionButton variant="primary" theme={theme} onClick={handleAnalyzeFrames}>
+          解析実行
         </ActionButton>
       </div>
-
-      <DecorativeElements theme={theme} />
-    </StepContainer>
+    </FrameContainer>
   );
 };
 
@@ -321,11 +191,11 @@ const Chat = () => {
     render: ({ event, resolve }) => <InterruptHumanInTheLoop event={event} resolve={resolve} />,
   });
   useHumanInTheLoop({
-    name: "generate_task_steps",
-    description: "Generates a list of steps for the user to perform",
+    name: "extract_video_frames",
+    description: "動画からフレームを抽出し、ユーザーに選択させます",
     parameters: [
       {
-        name: "steps",
+        name: "frames",
         type: "object[]",
         attributes: [
           {
@@ -337,12 +207,20 @@ const Chat = () => {
             type: "string",
             enum: ["enabled", "disabled", "executing"],
           },
+          {
+            name: "timestamp",
+            type: "string",
+          },
+          {
+            name: "image_url",
+            type: "string",
+          },
         ],
       },
     ],
     available: "enabled",
     render: ({ args, respond, status }) => {
-      return <StepsFeedback args={args} respond={respond} status={status} />;
+      return <FramesFeedback args={args} respond={respond} status={status} />;
     },
   });
 
@@ -351,13 +229,13 @@ const Chat = () => {
       <div className="h-full w-full md:w-8/10 md:h-8/10 rounded-lg">
         <CopilotChat
           suggestions={[
-            { title: "Simple plan", message: "Please plan a trip to mars in 5 steps." },
-            { title: "Complex plan", message: "Please plan a pastra dish in 10 steps." },
+            { title: "製造ライン点検", message: "製造ラインの点検動画を解析して、チェックポイントを6フレーム抽出してください" },
+            { title: "組立工程", message: "組立工程の動画を解析して、重要な作業手順を9フレーム抽出してください" },
           ]}
           className="h-full rounded-2xl max-w-6xl mx-auto"
           labels={{
             initial:
-              "Hi, I'm an agent specialized in helping you with your tasks. How can I help you?",
+              "こんにちは！動画解析アシスタントです。動画の重要なフレームを抽出し、分析するお手伝いをします。",
           }}
         />
       </div>
@@ -365,30 +243,30 @@ const Chat = () => {
   );
 };
 
-const StepsFeedback = ({ args, respond, status }: { args: any; respond: any; status: any }) => {
+const FramesFeedback = ({ args, respond, status }: { args: any; respond: any; status: any }) => {
   const { theme } = useTheme();
-  const [localSteps, setLocalSteps] = useState<Step[]>([]);
+  const [localFrames, setLocalFrames] = useState<Frame[]>([]);
   const [accepted, setAccepted] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (status === "executing" && localSteps.length === 0) {
-      setLocalSteps(args.steps);
+    if (args.frames && args.frames.length > 0 && localFrames.length === 0) {
+      setLocalFrames(args.frames);
     }
-  }, [status, args.steps, localSteps]);
+  }, [args.frames, localFrames]);
 
-  if (args.steps === undefined || args.steps.length === 0) {
+  if (args.frames === undefined || args.frames.length === 0) {
     return <></>;
   }
 
-  const steps = localSteps.length > 0 ? localSteps : args.steps;
-  const enabledCount = steps.filter((step: any) => step.status === "enabled").length;
+  const frames = localFrames.length > 0 ? localFrames : args.frames;
+  const enabledCount = frames.filter((frame: any) => frame.status === "enabled").length;
 
-  const handleStepToggle = (index: number) => {
-    setLocalSteps((prevSteps) =>
-      prevSteps.map((step, i) =>
+  const handleFrameToggle = (index: number) => {
+    setLocalFrames((prevFrames) =>
+      prevFrames.map((frame, i) =>
         i === index
-          ? { ...step, status: step.status === "enabled" ? "disabled" : "enabled" }
-          : step,
+          ? { ...frame, status: frame.status === "enabled" ? "disabled" : "enabled" }
+          : frame,
       ),
     );
   };
@@ -400,92 +278,78 @@ const StepsFeedback = ({ args, respond, status }: { args: any; respond: any; sta
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (respond) {
+      const selectedFrames = localFrames.filter((frame) => frame.status === "enabled");
       setAccepted(true);
-      respond({ accepted: true, steps: localSteps.filter((step) => step.status === "enabled") });
+
+      // サーバーにログを送信
+      try {
+        await fetch("http://localhost:8080/log_selected_frames", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ frames: selectedFrames }),
+        });
+      } catch (error) {
+        console.error("ログ送信エラー:", error);
+      }
+
+      respond({ accepted: true, frames: selectedFrames });
     }
   };
 
   return (
-    <StepContainer theme={theme}>
-      <StepHeader
+    <FrameContainer theme={theme}>
+      <FrameHeader
         theme={theme}
         enabledCount={enabledCount}
-        totalCount={steps.length}
-        status={status}
-        showStatus={true}
+        totalCount={frames.length}
       />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {steps.map((step: any, index: any) => (
-          <StepItem
+        {frames.map((frame: any, index: any) => (
+          <FrameItem
             key={index}
-            step={step}
+            frame={frame}
             theme={theme}
-            status={status}
-            onToggle={() => handleStepToggle(index)}
-            disabled={status !== "executing"}
+            onToggle={() => handleFrameToggle(index)}
           />
         ))}
       </div>
 
-      {/* Action Buttons - Different logic from InterruptHumanInTheLoop */}
+      {/* Action Buttons */}
       {accepted === null && (
-        <div className="flex justify-center gap-4">
-          <ActionButton
-            variant="secondary"
-            theme={theme}
-            disabled={status !== "executing"}
-            onClick={handleReject}
-          >
-            <span className="mr-2">✗</span>
-            Reject
+        <div className="flex justify-end gap-3">
+          <ActionButton variant="secondary" theme={theme} onClick={handleReject}>
+            キャンセル
           </ActionButton>
-          <ActionButton
-            variant="success"
-            theme={theme}
-            disabled={status !== "executing"}
-            onClick={handleConfirm}
-          >
-            <span className="mr-2">✓</span>
-            Confirm
-            <span
-              className={`ml-2 px-2 py-1 rounded-full text-xs font-bold ${
-                theme === "dark" ? "bg-green-800/50" : "bg-green-600/20"
-              }`}
-            >
-              {enabledCount}
-            </span>
+          <ActionButton variant="primary" theme={theme} onClick={handleConfirm}>
+            解析実行
           </ActionButton>
         </div>
       )}
 
-      {/* Result State - Unique to StepsFeedback */}
+      {/* Result State */}
       {accepted !== null && (
-        <div className="flex justify-center">
+        <div className="flex justify-end">
           <div
-            className={`px-6 py-3 rounded-lg font-semibold flex items-center gap-2 ${
+            className={`px-4 py-2 rounded text-sm font-medium ${
               accepted
                 ? theme === "dark"
-                  ? "bg-green-900/30 text-green-300 border border-green-500/30"
-                  : "bg-green-50 text-green-700 border border-green-200"
+                  ? "bg-green-800 text-green-100"
+                  : "bg-green-100 text-green-800"
                 : theme === "dark"
-                  ? "bg-red-900/30 text-red-300 border border-red-500/30"
-                  : "bg-red-50 text-red-700 border border-red-200"
+                  ? "bg-gray-700 text-gray-300"
+                  : "bg-gray-100 text-gray-600"
             }`}
           >
-            <span className="text-lg">{accepted ? "✓" : "✗"}</span>
-            {accepted ? "Accepted" : "Rejected"}
+            {accepted ? "解析実行中..." : "キャンセルしました"}
           </div>
         </div>
       )}
-
-      <DecorativeElements
-        theme={theme}
-        variant={accepted === true ? "success" : accepted === false ? "danger" : "default"}
-      />
-    </StepContainer>
+    </FrameContainer>
   );
 };
 
